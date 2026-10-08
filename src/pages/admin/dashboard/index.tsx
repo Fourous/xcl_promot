@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
-import { fetchDashboard, fetchActivities } from '@/services/admin';
+import { fetchDashboard, fetchActivities, adminCreateActivity } from '@/services/admin';
 import { getToken, getAdminInfo } from '@/utils/auth';
 import { getActivityId, setActivityId } from '@/utils/activity';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import StatePage from '@/components/business/state-page';
 import { Users, FileSpreadsheet, Settings, List, Trophy, ShieldCheck, Plus } from 'lucide-react-taro';
 
@@ -34,6 +36,9 @@ export default function Dashboard() {
   const [refreshTime, setRefreshTime] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   const [currentId, setCurrentId] = useState(getActivityId());
+  const [showCreate, setShowCreate] = useState(false);
+  const [activityName, setActivityName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const load = async (aid?: number) => {
     setLoading(true);
@@ -62,6 +67,27 @@ export default function Dashboard() {
     setCurrentId(id);
     setActivityId(id);
     load(id);
+  };
+
+  const handleCreateActivity = async () => {
+    if (!activityName.trim()) {
+      Taro.showToast({ title: '请输入活动名称', icon: 'none' });
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await adminCreateActivity(getToken(), { activity_name: activityName.trim() });
+      const newId = res.data?.id;
+      Taro.showToast({ title: '已创建活动', icon: 'success' });
+      setShowCreate(false);
+      setActivityName('');
+      await loadActivities();
+      if (newId) switchActivity(newId);
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '创建失败', icon: 'none' });
+    } finally {
+      setCreating(false);
+    }
   };
 
   useLoad(() => {
@@ -96,7 +122,7 @@ export default function Dashboard() {
         <View className="bg-white rounded-lg p-3 mb-4">
           <View className="flex flex-row items-center justify-between mb-2">
             <Text className="block text-sm font-bold text-gray-900">当前活动</Text>
-            <View className="flex flex-row items-center" onClick={() => Taro.navigateTo({ url: '/pages/admin/settings/index' })}>
+            <View className="flex flex-row items-center" onClick={() => setShowCreate(true)}>
               <Plus size={14} color="#C80018" />
               <Text className="text-xs text-[#C80018] ml-1">新建活动</Text>
             </View>
@@ -202,6 +228,32 @@ export default function Dashboard() {
           </View>
         </View>
       ) : null}
+
+      {/* 新建活动弹窗 */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建活动</DialogTitle>
+          </DialogHeader>
+          <View className="bg-gray-50 rounded-lg px-3 py-2 mt-2">
+            <Input
+              className="w-full bg-transparent"
+              placeholder="请输入活动名称，如：2026 年度评选活动"
+              value={activityName}
+              onInput={(e) => setActivityName(e.detail.value)}
+            />
+          </View>
+          <Text className="block text-xs text-gray-500 mt-2">
+            新建后可在候选人管理、Excel 导入中为该活动独立维护人员与规则。
+          </Text>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
+            <Button onClick={handleCreateActivity} disabled={creating}>
+              {creating ? '创建中…' : '创建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </View>
   );
 }

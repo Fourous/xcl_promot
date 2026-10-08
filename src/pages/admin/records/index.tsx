@@ -4,6 +4,7 @@ import Taro, { useLoad } from '@tarojs/taro';
 import { Network } from '@/network';
 import { adminVoteRecords } from '@/services/admin';
 import { getToken } from '@/utils/auth';
+import { getActivityId } from '@/utils/activity';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -47,7 +48,7 @@ export default function RecordsPage() {
   const exportResult = async () => {
     try {
       await Network.downloadFile({
-        url: '/api/stats/export',
+        url: `/api/stats/export?activityId=${getActivityId()}`,
         header: { Authorization: `Bearer ${getToken()}` },
       });
       Taro.showToast({ title: '已导出', icon: 'success' });

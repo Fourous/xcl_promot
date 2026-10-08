@@ -19,7 +19,7 @@ import {
   toggleSelect as toggleSelectUtil,
   clearSelection,
 } from '@/utils/selection';
-import { ensureLogin, isVerified } from '@/utils/session';
+import { getVoterToken } from '@/utils/session';
 
 const PAGE_SIZE = 20;
 
@@ -75,14 +75,14 @@ const CandidatesPage = () => {
     // 恢复已选状态
     setSelected(getSelectedIds());
 
-    // 未完成工号校验则跳转登录页；已投票用户直接进入「我的投票」状态页
+    // 未登录跳转登录页；已投票用户直接进入「我的投票」状态页
     try {
-      const openid = await ensureLogin();
-      if (!isVerified()) {
+      const token = getVoterToken();
+      if (!token) {
         Taro.redirectTo({ url: '/pages/vote/login/index' });
         return;
       }
-      const myRes = await fetchMyVote(openid);
+      const myRes = await fetchMyVote(token);
       if (myRes.data?.hasVoted) {
         Taro.redirectTo({ url: '/pages/vote/mine/index' });
         return;
@@ -151,9 +151,9 @@ const CandidatesPage = () => {
 
     setSubmitting(true);
     try {
-      const openid = await ensureLogin();
-      const idempotencyToken = `vote_${openid}_${Date.now()}`;
-      await submitVote({ openid, candidateIds: selected, idempotencyToken });
+      const token = getVoterToken();
+      const idempotencyToken = `vote_${token}_${Date.now()}`;
+      await submitVote({ token, candidateIds: selected, idempotencyToken });
       clearSelection();
       setSelected([]);
       Taro.redirectTo({ url: '/pages/vote/success/index' });

@@ -1,59 +1,49 @@
 import { View, Text } from '@tarojs/components';
-import Taro, { useLoad } from '@tarojs/taro';
+import Taro from '@tarojs/taro';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { verifyVoter } from '@/services/vote';
-import { ensureLogin, setVerified } from '@/utils/session';
+import { voteLogin } from '@/services/vote';
+import { saveSession } from '@/utils/session';
 
-/** 投票人身份校验页（工号 + 姓名，仅名单内人员可投票） */
+/** 投票人账号登录页（工号 + 密码，首次登录强制改密） */
 const VoterLoginPage = () => {
-  const [openid, setOpenid] = useState('');
-  const [employeeNo, setEmployeeNo] = useState('');
-  const [name, setName] = useState('');
+  const [account, setAccount] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useLoad(async () => {
-    try {
-      const id = await ensureLogin();
-      setOpenid(id);
-    } catch (e) {
-      console.error('微信登录失败', e);
-    }
-  });
-
   const handleLogin = async () => {
-    const emp = employeeNo.trim();
-    const nm = name.trim();
-    if (!emp) {
+    const acc = account.trim();
+    const pwd = password.trim();
+    if (!acc) {
       Taro.showToast({ title: '请输入工号', icon: 'none' });
       return;
     }
-    if (!nm) {
-      Taro.showToast({ title: '请输入姓名', icon: 'none' });
-      return;
-    }
-    if (!openid) {
-      Taro.showToast({ title: '微信授权中，请稍候重试', icon: 'none' });
+    if (!pwd) {
+      Taro.showToast({ title: '请输入密码', icon: 'none' });
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await verifyVoter({ openid, employeeNo: emp, name: nm });
-      if (res.status === 'success') {
-        setVerified(true);
-        Taro.showToast({ title: '身份校验通过', icon: 'success' });
+      const res = await voteLogin(acc, pwd);
+      const d = res.data;
+      saveSession({ token: d.token, employeeNo: d.employeeNo, name: d.name });
+
+      if (d.needChangePassword) {
+        Taro.showToast({ title: '请先修改初始密码', icon: 'none' });
         setTimeout(() => {
-          Taro.redirectTo({ url: '/pages/vote/candidates/index' });
-        }, 500);
+          Taro.redirectTo({ url: '/pages/vote/change-password/index' });
+        }, 600);
       } else {
-        Taro.showToast({ title: '校验未通过', icon: 'none' });
+        Taro.showToast({ title: '登录成功', icon: 'success' });
+        setTimeout(() => {
+          Taro.reLaunch({ url: '/pages/index/index' });
+        }, 600);
       }
     } catch (e: any) {
-      const msg = e?.message || '校验失败，请核对工号与姓名';
-      Taro.showToast({ title: msg, icon: 'none' });
+      Taro.showToast({ title: e?.message || '登录失败，请核对工号与密码', icon: 'none' });
     } finally {
       setSubmitting(false);
     }
@@ -66,9 +56,9 @@ const VoterLoginPage = () => {
         <View className="absolute top-0 left-0 right-0 h-1 bg-[#C9A063]" />
         <View className="absolute right-6 top-16 w-16 h-16 border border-white opacity-20 rotate-45" />
         <View className="absolute right-12 top-24 w-10 h-10 border border-[#C9A063] opacity-40 rotate-45" />
-        <Text className="block text-white text-2xl font-bold tracking-wide">投票人身份验证</Text>
+        <Text className="block text-white text-2xl font-bold tracking-wide">投票人登录</Text>
         <Text className="block text-white text-sm mt-3 tracking-wide opacity-90">
-          请填写您的工号与姓名进行核验
+          请使用您的工号登录参与投票
         </Text>
       </View>
 
@@ -82,24 +72,25 @@ const VoterLoginPage = () => {
                 <Input
                   className="w-full bg-transparent"
                   placeholder="请输入工号（如 EMP001）"
-                  value={employeeNo}
-                  onInput={(e) => setEmployeeNo(e.detail.value)}
+                  value={account}
+                  onInput={(e) => setAccount(e.detail.value)}
                 />
               </View>
             </View>
             <View className="mb-2">
-              <Text className="block text-sm font-bold text-foreground mb-2">姓名</Text>
+              <Text className="block text-sm font-bold text-foreground mb-2">密码</Text>
               <View className="bg-gray-50 rounded-lg px-4 py-3">
                 <Input
                   className="w-full bg-transparent"
-                  placeholder="请输入姓名"
-                  value={name}
-                  onInput={(e) => setName(e.detail.value)}
+                  password
+                  placeholder="请输入密码"
+                  value={password}
+                  onInput={(e) => setPassword(e.detail.value)}
                 />
               </View>
             </View>
             <Text className="block text-xs text-gray-400 mt-3 leading-5">
-              仅活动名单内人员可参与投票，请确保工号与姓名与名单一致。
+              首次登录初始密码为您的工号，登录后需修改密码。
             </Text>
           </CardContent>
         </Card>
@@ -112,7 +103,7 @@ const VoterLoginPage = () => {
           onClick={handleLogin}
           disabled={submitting}
         >
-          {submitting ? '校验中…' : '验证并进入投票'}
+          {submitting ? '登录中…' : '登录'}
         </Button>
       </View>
     </View>

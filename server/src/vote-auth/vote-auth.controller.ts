@@ -1,26 +1,26 @@
 import { Controller, Post, Body, HttpCode, BadRequestException } from '@nestjs/common';
 import { VoteAuthService } from './vote-auth.service';
 
-/** 投票端身份识别接口 */
+/** 投票端账号密码登录接口 */
 @Controller('vote-auth')
 export class VoteAuthController {
   constructor(private readonly service: VoteAuthService) {}
 
-  /** 微信登录：返回 openid 及投票状态 */
+  /** 账号密码登录（工号 + 密码） */
   @Post('login')
   @HttpCode(200)
-  async login(@Body() body: { code: string; activityId?: number }) {
-    if (!body?.code) throw new BadRequestException('缺少登录凭证 code');
-    const data = await this.service.login(body.code, body.activityId);
+  async login(@Body() body: { account: string; password: string }) {
+    if (!body?.account || !body?.password) throw new BadRequestException('参数不完整');
+    const data = await this.service.login(body.account, body.password);
     return { status: 'success', data };
   }
 
-  /** 工号/姓名补充校验（可选开启） */
-  @Post('verify')
+  /** 修改密码（首次登录强制） */
+  @Post('change-password')
   @HttpCode(200)
-  async verify(@Body() body: { openid: string; employeeNo: string; name: string; activityId?: number }) {
-    if (!body?.openid) throw new BadRequestException('缺少 openid');
-    const data = await this.service.verify(body.openid, body.employeeNo, body.name, body.activityId);
+  async changePassword(@Body() body: { token: string; oldPassword: string; newPassword: string }) {
+    if (!body?.token || !body?.newPassword) throw new BadRequestException('参数不完整');
+    const data = await this.service.changePassword(body.token, body.oldPassword, body.newPassword);
     return { status: 'success', data };
   }
 }

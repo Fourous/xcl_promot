@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { verifyVoterToken } from '@/common/token.util';
 
 /** 活动（vote_config 多行）管理服务：多活动隔离的核心 */
 @Injectable()
@@ -28,6 +29,35 @@ export class ActivitiesService {
         (!a.end_time || new Date(a.end_time).getTime() >= now),
     );
     return ongoing || all.find((a: any) => a.status === 'ongoing') || all[all.length - 1];
+  }
+
+  /** 投票端活动列表（含当前账号投票权标记） */
+  async mine(token?: string) {
+    const client = getSupabaseClient();
+    const { data: all } = await client
+      .from('vote_config')
+      .select('*')
+      .in('status', ['upcoming', 'ongoing', 'ended'])
+      .order('id', { ascending: true });
+
+    const payload = token ? verifyVoterToken(token) : null;
+    const employeeNo = payload?.employeeNo || '';
+
+    const result: any[] = [];
+    for (const a of all || []) {
+      let hasVoteRight = false;
+      if (employeeNo) {
+        const { data: voter } = await client
+          .from('voters')
+          .select('id')
+          .eq('activity_id', a.id)
+          .eq('employee_no', employeeNo)
+          .maybeSingle();
+        hasVoteRight = !!voter;
+      }
+      result.push({ ...a, hasVoteRight });
+    }
+    return result;
   }
 
   /** 新建活动（复制模板配置，候选人与清单由管理员后续导入/配置） */

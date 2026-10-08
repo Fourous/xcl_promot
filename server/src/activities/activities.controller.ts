@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   HttpCode,
   UseGuards,
   ParseIntPipe,
@@ -27,6 +28,13 @@ export class ActivitiesController {
   @Get('current')
   async current() {
     const data = await this.service.current();
+    return { status: 'success', data };
+  }
+
+  /** 投票端活动列表（含投票权标记） */
+  @Get('mine')
+  async mine(@Query('token') token?: string) {
+    const data = await this.service.mine(token);
     return { status: 'success', data };
   }
 

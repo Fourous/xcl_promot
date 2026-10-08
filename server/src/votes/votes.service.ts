@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { verifyVoterToken } from '@/common/token.util';
 
 interface SubmitBody {
-  openid: string;
+  token: string;
   candidateIds: string[];
   idempotencyToken: string;
   ip?: string;
@@ -14,11 +15,15 @@ interface SubmitBody {
 export class VotesService {
   async submit(body: any) {
     const client = getSupabaseClient();
-    const { openid, candidateIds, idempotencyToken } = body || ({} as SubmitBody);
-    if (!openid || !candidateIds?.length || !idempotencyToken) {
+    const { token, candidateIds, idempotencyToken } = body || ({} as SubmitBody);
+    if (!token || !candidateIds?.length || !idempotencyToken) {
       throw new BadRequestException('参数不完整');
     }
     const activityId = Number(body.activityId) || 1;
+
+    // 0. 投票人令牌校验（账号密码登录后签发）
+    const voterPayload = verifyVoterToken(token);
+    if (!voterPayload) throw new BadRequestException('登录已过期，请重新登录');
 
     // 1. 读取规则配置
     const { data: config } = await client.from('vote_config').select('*').eq('id', activityId).single();
@@ -67,14 +72,14 @@ export class VotesService {
       return { submitted: true, alreadySubmitted: true, picks: candidateIds.length };
     }
 
-    // 7. 投票人校验（一人一轮一票）
+    // 7. 投票人校验（按账号工号校验，一人一轮一票）
     const { data: voter } = await client
       .from('voters')
       .select('*')
       .eq('activity_id', activityId)
-      .eq('openid', openid)
+      .eq('employee_no', voterPayload.employeeNo)
       .maybeSingle();
-    if (!voter) throw new BadRequestException('投票人不存在');
+    if (!voter) throw new BadRequestException('您无此活动的投票权');
     if (voter.has_voted) throw new BadRequestException('您已投过票');
 
     // 8. 插入提交记录（voter_id、token 均有唯一约束，数据库层兜底并发）
@@ -123,15 +128,17 @@ export class VotesService {
   }
 
   /** 我的投票记录（匿名模式不返回具体对象） */
-  async mine(openid: string, activityId = 1) {
+  async mine(token: string, activityId = 1) {
     const client = getSupabaseClient();
     const aid = Number(activityId) || 1;
+    const payload = verifyVoterToken(token);
+    if (!payload) throw new BadRequestException('登录已过期，请重新登录');
     const { data: config } = await client.from('vote_config').select('anonymous').eq('id', aid).single();
     const { data: voter } = await client
       .from('voters')
       .select('id,has_voted,voted_at')
       .eq('activity_id', aid)
-      .eq('openid', openid)
+      .eq('employee_no', payload.employeeNo)
       .maybeSingle();
 
     if (!voter || !voter.has_voted) {

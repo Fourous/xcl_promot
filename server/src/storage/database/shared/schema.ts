@@ -68,6 +68,21 @@ export const voters = pgTable(
   ]
 );
 
+// 全局投票账号（工号 + 密码，跨活动通用；密码为空表示首次登录未改密）
+export const voterAccounts = pgTable(
+  "voter_accounts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    employee_no: varchar("employee_no", { length: 50 }).notNull(),
+    name: varchar("name", { length: 50 }).notNull(),
+    department: varchar("department", { length: 100 }),
+    password_hash: varchar("password_hash", { length: 200 }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [uniqueIndex("voter_accounts_employee_no_idx").on(table.employee_no)]
+);
+
 // 投票提交记录（一次提交 = 多张选票；按活动隔离）
 export const voteSubmissions = pgTable(
   "vote_submissions",

@@ -1,43 +1,45 @@
 import Taro from '@tarojs/taro';
-import { voterLogin } from '@/services/vote';
 
-const KEY = 'voter_openid';
-const VERIFIED_KEY = 'voter_verified';
+const TOKEN_KEY = 'voter_token';
+const EMPLOYEE_NO_KEY = 'voter_employee_no';
+const NAME_KEY = 'voter_name';
 
-/** 读取已登录 openid */
-export function getOpenid(): string {
-  return Taro.getStorageSync(KEY) || '';
+export interface VoterSession {
+  token: string;
+  employeeNo: string;
+  name: string;
 }
 
-/** 保存 openid */
-export function setOpenid(openid: string) {
-  Taro.setStorageSync(KEY, openid);
+/** 读取投票人登录 token */
+export function getVoterToken(): string {
+  return Taro.getStorageSync(TOKEN_KEY) || '';
 }
 
-/** 确保已登录，返回 openid（首次登录时自动获取） */
-export async function ensureLogin(): Promise<string> {
-  const exist = getOpenid();
-  if (exist) return exist;
-
-  let code = '';
-  if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
-    const loginRes = await Taro.login();
-    code = loginRes.code || '';
-  }
-  if (!code) {
-    code = `h5_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-  }
-  const { openid } = await voterLogin(code);
-  setOpenid(openid);
-  return openid;
+/** 读取当前投票人工号 */
+export function getEmployeeNo(): string {
+  return Taro.getStorageSync(EMPLOYEE_NO_KEY) || '';
 }
 
-/** 是否已完成工号校验（绑定） */
-export function isVerified(): boolean {
-  return !!Taro.getStorageSync(VERIFIED_KEY);
+/** 读取当前投票人姓名 */
+export function getVoterName(): string {
+  return Taro.getStorageSync(NAME_KEY) || '';
 }
 
-/** 设置工号校验状态 */
-export function setVerified(verified: boolean) {
-  Taro.setStorageSync(VERIFIED_KEY, verified);
+/** 是否已登录 */
+export function isLoggedIn(): boolean {
+  return !!getVoterToken();
+}
+
+/** 保存登录态 */
+export function saveSession(session: VoterSession) {
+  Taro.setStorageSync(TOKEN_KEY, session.token);
+  Taro.setStorageSync(EMPLOYEE_NO_KEY, session.employeeNo);
+  Taro.setStorageSync(NAME_KEY, session.name);
+}
+
+/** 清除登录态 */
+export function clearSession() {
+  Taro.removeStorageSync(TOKEN_KEY);
+  Taro.removeStorageSync(EMPLOYEE_NO_KEY);
+  Taro.removeStorageSync(NAME_KEY);
 }

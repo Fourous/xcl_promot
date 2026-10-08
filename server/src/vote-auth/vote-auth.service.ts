@@ -1,90 +1,79 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hashPassword, verifyPassword } from '@/common/password.util';
+import { signVoterToken, verifyVoterToken } from '@/common/token.util';
 
-/** 投票端身份识别服务 */
+/** 投票端账号密码登录与改密服务（账号 = 工号，全局账号体系） */
 @Injectable()
 export class VoteAuthService {
   /**
-   * 微信登录：根据 code 生成稳定 openid，查询是否已绑定投票人。
-   * 演示环境用 code 直接生成（真实环境需调用微信 code2session 换取 openid）。
-   * 未绑定时返回 verified=false，前端引导进入工号校验页。
+   * 账号密码登录。
+   * 账号为工号；首次登录（password_hash 为空）初始密码 = 工号，需强制改密。
    */
-  async login(code: string, activityId = 1) {
-    const openid = `demo_${String(code).trim()}`;
-    const aid = Number(activityId) || 1;
+  async login(account: string, password: string) {
     const client = getSupabaseClient();
-
-    const { data: existing } = await client
-      .from('voters')
-      .select('*')
-      .eq('activity_id', aid)
-      .eq('openid', openid)
-      .maybeSingle();
-
-    if (existing) {
-      return {
-        openid,
-        verified: true,
-        hasVoted: existing.has_voted,
-        name: existing.name,
-        employeeNo: existing.employee_no,
-        department: existing.department,
-      };
-    }
-
-    return {
-      openid,
-      verified: false,
-      hasVoted: false,
-      name: null,
-      employeeNo: null,
-      department: null,
-    };
-  }
-
-  /**
-   * 工号/姓名校验：校验投票人是否在预置清单中，并绑定 openid。
-   * 只有清单内（工号 + 姓名匹配）且未绑定的投票人才能通过。
-   */
-  async verify(openid: string, employeeNo: string, name: string, activityId = 1) {
-    const client = getSupabaseClient();
-    const aid = Number(activityId) || 1;
-    const emp = String(employeeNo || '').trim();
-    const nm = String(name || '').trim();
+    const emp = String(account || '').trim();
+    const pwd = String(password || '').trim();
     if (!emp) throw new BadRequestException('请输入工号');
-    if (!nm) throw new BadRequestException('请输入姓名');
+    if (!pwd) throw new BadRequestException('请输入密码');
 
-    const { data: roster } = await client
-      .from('voters')
+    const { data: acc } = await client
+      .from('voter_accounts')
       .select('*')
-      .eq('activity_id', aid)
       .eq('employee_no', emp)
       .maybeSingle();
 
-    if (!roster) throw new BadRequestException('工号不在投票名单中，请联系管理员');
-    if (roster.name !== nm) throw new BadRequestException('姓名与工号不匹配，请核对后重试');
-    if (roster.openid && roster.openid !== openid) {
-      throw new BadRequestException('该工号已被绑定，请勿重复投票');
+    if (!acc) throw new BadRequestException('账号不存在或不在投票名单中');
+
+    let needChangePassword = false;
+    if (!acc.password_hash) {
+      // 首次登录：初始密码 = 工号
+      if (pwd !== emp) throw new BadRequestException('工号或密码错误');
+      needChangePassword = true;
+    } else {
+      if (!verifyPassword(pwd, acc.password_hash)) throw new BadRequestException('工号或密码错误');
     }
 
-    const { data, error } = await client
-      .from('voters')
-      .update({ openid })
-      .eq('id', roster.id)
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') throw new BadRequestException('该工号已被绑定，请勿重复投票');
-      throw new BadRequestException(`校验失败: ${error.message}`);
-    }
-
+    const token = signVoterToken(acc.employee_no, acc.name);
     return {
-      openid,
-      verified: true,
-      name: data.name,
-      employeeNo: data.employee_no,
-      hasVoted: data.has_voted,
+      token,
+      employeeNo: acc.employee_no,
+      name: acc.name,
+      department: acc.department || null,
+      needChangePassword,
     };
+  }
+
+  /** 修改密码（首次登录强制；后续可自行修改） */
+  async changePassword(token: string, oldPassword: string, newPassword: string) {
+    const payload = verifyVoterToken(token);
+    if (!payload) throw new BadRequestException('登录已过期，请重新登录');
+
+    const client = getSupabaseClient();
+    const oldPwd = String(oldPassword || '').trim();
+    const newPwd = String(newPassword || '').trim();
+    if (!newPwd || newPwd.length < 4) throw new BadRequestException('新密码至少 4 位');
+
+    const { data: acc } = await client
+      .from('voter_accounts')
+      .select('*')
+      .eq('employee_no', payload.employeeNo)
+      .maybeSingle();
+    if (!acc) throw new BadRequestException('账号不存在');
+
+    // 首次改密时原密码 = 工号；后续校验真实原密码
+    if (!acc.password_hash) {
+      if (oldPwd !== payload.employeeNo) throw new BadRequestException('原密码错误');
+    } else {
+      if (!verifyPassword(oldPwd, acc.password_hash)) throw new BadRequestException('原密码错误');
+    }
+
+    const { error } = await client
+      .from('voter_accounts')
+      .update({ password_hash: hashPassword(newPwd), updated_at: new Date().toISOString() })
+      .eq('id', acc.id);
+    if (error) throw new BadRequestException(`修改失败: ${error.message}`);
+
+    return { changed: true };
   }
 }

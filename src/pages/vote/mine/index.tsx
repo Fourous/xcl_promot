@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { useLoad } from '@tarojs/taro';
 import { fetchMyVote } from '@/services/vote';
-import { getOpenid } from '@/utils/session';
+import { getVoterToken } from '@/utils/session';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import StatePage from '@/components/business/state-page';
 
@@ -13,8 +13,8 @@ export default function MyVote() {
 
   useLoad(async () => {
     try {
-      const openid = getOpenid();
-      const res = await fetchMyVote(openid);
+      const token = getVoterToken();
+      const res = await fetchMyVote(token);
       setData(res.data);
     } catch (e) {
       console.error('加载投票记录失败', e);

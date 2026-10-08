@@ -42,6 +42,11 @@ export interface VoteConfig {
   status: string;
 }
 
+/** 带投票权标记的活动（首页列表） */
+export interface ActivityWithRight extends VoteConfig {
+  hasVoteRight: boolean;
+}
+
 /** 统一响应包裹 */
 interface ApiResponse<T> {
   status: string;
@@ -56,18 +61,11 @@ export interface CandidatePage {
   pageSize: number;
 }
 
-/** 获取活动列表 */
+/** 获取活动列表（公开） */
 export async function fetchActivities(): Promise<VoteConfig[]> {
   const res = await Network.request({ url: '/api/activities' });
   console.log('[API] GET /api/activities ->', res.data);
   return (res.data as ApiResponse<VoteConfig[]>).data;
-}
-
-/** 获取当前活动（投票端入口） */
-export async function fetchCurrentActivity(): Promise<VoteConfig | null> {
-  const res = await Network.request({ url: '/api/activities/current' });
-  console.log('[API] GET /api/activities/current ->', res.data);
-  return (res.data as ApiResponse<VoteConfig | null>).data;
 }
 
 /** 获取活动配置 */
@@ -106,36 +104,48 @@ export async function fetchDepartments(activityId?: number): Promise<string[]> {
   return (res.data as ApiResponse<string[]>).data;
 }
 
-/** 投票人登录（code -> openid） */
-export async function voterLogin(code: string, activityId?: number): Promise<{ openid: string }> {
+/** 投票人账号密码登录 */
+export async function voteLogin(account: string, password: string) {
   const res = await Network.request({
     url: '/api/vote-auth/login',
     method: 'POST',
-    data: { code, activityId: activityId ?? getActivityId() },
+    data: { account, password },
   });
   console.log('[API] POST /api/vote-auth/login ->', res.data);
-  return (res.data as ApiResponse<{ openid: string }>).data;
+  return res.data as ApiResponse<{
+    token: string;
+    employeeNo: string;
+    name: string;
+    department: string | null;
+    needChangePassword: boolean;
+  }>;
 }
 
-/** 工号/姓名校验 */
-export async function verifyVoter(body: {
-  openid: string;
-  employeeNo?: string;
-  name?: string;
-  activityId?: number;
-}) {
+/** 修改密码（首次登录强制） */
+export async function changePassword(token: string, oldPassword: string, newPassword: string) {
   const res = await Network.request({
-    url: '/api/vote-auth/verify',
+    url: '/api/vote-auth/change-password',
     method: 'POST',
-    data: { ...body, activityId: body.activityId ?? getActivityId() },
+    data: { token, oldPassword, newPassword },
   });
-  console.log('[API] POST /api/vote-auth/verify ->', res.data);
-  return res.data as ApiResponse<any>;
+  console.log('[API] POST /api/vote-auth/change-password ->', res.data);
+  return res.data as ApiResponse<{ changed: boolean }>;
+}
+
+/** 获取当前用户的活动列表（含投票权标记） */
+export async function fetchMyActivities(token: string): Promise<ActivityWithRight[]> {
+  const res = await Network.request({
+    url: '/api/activities/mine',
+    method: 'GET',
+    data: { token },
+  });
+  console.log('[API] GET /api/activities/mine ->', res.data);
+  return (res.data as ApiResponse<ActivityWithRight[]>).data;
 }
 
 /** 提交投票 */
 export async function submitVote(body: {
-  openid: string;
+  token: string;
   candidateIds: string[];
   idempotencyToken: string;
   activityId?: number;
@@ -150,11 +160,11 @@ export async function submitVote(body: {
 }
 
 /** 我的投票记录 */
-export async function fetchMyVote(openid: string, activityId?: number) {
+export async function fetchMyVote(token: string, activityId?: number) {
   const res = await Network.request({
     url: '/api/votes/mine',
     method: 'GET',
-    data: { openid, activityId: activityId ?? getActivityId() },
+    data: { token, activityId: activityId ?? getActivityId() },
   });
   console.log('[API] GET /api/votes/mine ->', res.data);
   return res.data as ApiResponse<any>;

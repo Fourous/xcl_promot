@@ -1,155 +1,170 @@
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { fetchConfig, fetchCurrentActivity, VoteConfig } from '@/services/vote';
+import { Badge } from '@/components/ui/badge';
+import { fetchMyActivities, ActivityWithRight } from '@/services/vote';
 import { setActivityId } from '@/utils/activity';
+import { isLoggedIn, getVoterToken, getVoterName } from '@/utils/session';
 
-/** 格式化倒计时为「X 天 X 时 X 分 X 秒」 */
-function formatCountdown(ms: number): string {
-  if (ms <= 0) return '0 天 0 时 0 分 0 秒';
-  const day = Math.floor(ms / 86400000);
-  const hour = Math.floor((ms % 86400000) / 3600000);
-  const minute = Math.floor((ms % 3600000) / 60000);
-  const second = Math.floor((ms % 60000) / 1000);
-  return `${day} 天 ${hour} 时 ${minute} 分 ${second} 秒`;
-}
+const STATUS_LABEL: Record<string, string> = {
+  draft: '草稿',
+  upcoming: '未开始',
+  ongoing: '进行中',
+  ended: '已结束',
+  archived: '已归档',
+};
+
+const STATUS_VARIANT: Record<string, 'default' | 'outline' | 'secondary' | 'destructive'> = {
+  ongoing: 'default',
+  upcoming: 'outline',
+  ended: 'secondary',
+  draft: 'outline',
+  archived: 'secondary',
+};
 
 /** 格式化时间区间 */
 function formatRange(start: string | null, end: string | null): string {
-  if (!start || !end) return '待定';
+  if (!start || !end) return '时间待定';
   const s = new Date(start).toLocaleDateString('zh-CN');
   const e = new Date(end).toLocaleDateString('zh-CN');
   return `${s} 至 ${e}`;
 }
 
+/** 投票端首页：活动列表（含投票权校验） */
 const IndexPage = () => {
-  const [config, setConfig] = useState<VoteConfig | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [activities, setActivities] = useState<ActivityWithRight[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useLoad(async () => {
     try {
-      // 确定当前活动并写入全局，保证后续请求按活动隔离
-      const current = await fetchCurrentActivity();
-      if (current?.id) setActivityId(current.id);
-      const cfg = await fetchConfig();
-      setConfig(cfg);
+      const list = await fetchMyActivities(getVoterToken());
+      setActivities(list);
     } catch (e) {
-      console.error('加载活动配置失败', e);
+      console.error('加载活动列表失败', e);
+      setActivities([]);
+    } finally {
+      setLoading(false);
     }
   });
 
-  // 每秒刷新当前时间，驱动倒计时
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const goActivity = (activity: ActivityWithRight) => {
+    if (activity.status === 'upcoming' || activity.status === 'draft') return;
 
-  const startMs = config?.start_time ? new Date(config.start_time).getTime() : 0;
-  const endMs = config?.end_time ? new Date(config.end_time).getTime() : 0;
-
-  // 活动状态：not_started / ongoing / ended
-  let phase: 'not_started' | 'ongoing' | 'ended' = 'ongoing';
-  if (config?.status === 'not_started' || now < startMs) phase = 'not_started';
-  else if (config?.status === 'ended' || now >= endMs) phase = 'ended';
-
-  const countdownTarget = phase === 'not_started' ? startMs - now : endMs - now;
-  const countdownLabel = phase === 'not_started' ? '距开始' : '距结束';
-
-  const goVote = () => {
-    if (phase === 'ended') {
+    // 查看结果（公开）
+    if (activity.status === 'ended') {
+      setActivityId(activity.id);
       Taro.navigateTo({ url: '/pages/vote/result/index' });
       return;
     }
+
+    // 进入投票需先登录
+    if (!isLoggedIn()) {
+      Taro.navigateTo({ url: '/pages/vote/login/index' });
+      return;
+    }
+
+    // 投票权校验
+    if (!activity.hasVoteRight) {
+      Taro.showModal({
+        title: '暂无投票权',
+        content: '您不在该活动的投票名单中，无法进入投票。',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
+
+    setActivityId(activity.id);
     Taro.navigateTo({ url: '/pages/vote/candidates/index' });
   };
 
+  const loggedIn = isLoggedIn();
+
   return (
-    <View className="min-h-screen flex flex-col bg-[#F7F7F5]">
-      {/* 主视觉：红色几何块 */}
+    <View className="min-h-screen flex flex-col bg-[#F7F7F5] pb-10">
+      {/* 主视觉 */}
       <View className="bg-primary px-6 pt-14 pb-12 relative overflow-hidden">
-        {/* 顶部金线 */}
         <View className="absolute top-0 left-0 right-0 h-1 bg-[#C9A063]" />
-        {/* 抽象轨道线条装饰 */}
         <View className="absolute right-6 top-16 w-16 h-16 border border-white opacity-20 rotate-45" />
         <View className="absolute right-12 top-24 w-10 h-10 border border-[#C9A063] opacity-40 rotate-45" />
-
         <Text className="block text-white text-3xl font-bold tracking-wide leading-tight">
-          {config?.main_title || '致敬奋斗者 建功新时代'}
+          致敬奋斗者 建功新时代
         </Text>
-        <Text className="block text-white text-sm mt-3 tracking-wide">
-          {config?.subtitle || '评选活动正式启动'}
-        </Text>
+        <Text className="block text-white text-sm mt-3 tracking-wide">评选活动正式启动</Text>
         <View className="mt-5 flex items-center gap-2">
           <View className="w-8 h-px bg-[#C9A063]" />
           <Text className="text-white text-xs tracking-wide">
-            {config?.organizer || '集团党委 · 集团工会'}
+            {loggedIn ? `欢迎，${getVoterName() || getVoterToken().slice(0, 6)}` : '集团党委 · 集团工会'}
           </Text>
         </View>
       </View>
 
-      {/* 活动信息 */}
+      {/* 活动列表 */}
       <View className="px-4 mt-5">
-        <Card className="rounded-lg border-border shadow-none">
-          <CardContent className="p-5">
-            <Text className="block text-base font-bold text-foreground">
-              {config?.activity_name || '评选活动'}
-            </Text>
-            <View className="mt-4 flex items-center justify-between">
-              <Text className="text-sm text-muted-foreground">活动时间</Text>
-              <Text className="text-sm text-foreground tabular-nums">
-                {formatRange(config?.start_time ?? null, config?.end_time ?? null)}
-              </Text>
-            </View>
-            <View className="mt-3 flex items-center justify-between">
-              <Text className="text-sm text-muted-foreground">
-                {phase === 'ended' ? '活动状态' : countdownLabel}
-              </Text>
-              {phase === 'ended' ? (
-                <Text className="text-base font-bold text-foreground">活动已结束</Text>
-              ) : (
-                <Text className="text-base font-bold text-primary tabular-nums">
-                  {formatCountdown(countdownTarget)}
-                </Text>
-              )}
-            </View>
-          </CardContent>
-        </Card>
+        <Text className="block text-base font-bold text-foreground mb-3">评选活动</Text>
+
+        {loading ? (
+          <Text className="block text-sm text-gray-500 text-center py-8">加载中…</Text>
+        ) : activities.length === 0 ? (
+          <Card className="rounded-lg border-border shadow-none">
+            <CardContent className="p-6">
+              <Text className="block text-sm text-gray-500 text-center">暂无进行中的活动</Text>
+            </CardContent>
+          </Card>
+        ) : (
+          activities.map((a) => (
+            <Card key={a.id} className="rounded-lg border-border shadow-none mb-3">
+              <CardContent className="p-5">
+                <View className="flex flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <Text className="block text-base font-bold text-foreground">
+                      {a.activity_name}
+                    </Text>
+                    <Text className="block text-xs text-gray-400 mt-1">{a.main_title}</Text>
+                  </View>
+                  <Badge variant={STATUS_VARIANT[a.status] || 'outline'}>
+                    {STATUS_LABEL[a.status] || a.status}
+                  </Badge>
+                </View>
+
+                <View className="mt-4 flex items-center justify-between">
+                  <Text className="text-xs text-muted-foreground">活动时间</Text>
+                  <Text className="text-xs text-foreground tabular-nums">
+                    {formatRange(a.start_time ?? null, a.end_time ?? null)}
+                  </Text>
+                </View>
+
+                <Button
+                  className={`w-full mt-4 rounded-md ${
+                    a.status === 'upcoming' || a.status === 'draft'
+                      ? 'bg-gray-300 text-gray-500'
+                      : 'bg-primary text-white'
+                  }`}
+                  disabled={a.status === 'upcoming' || a.status === 'draft'}
+                  onClick={() => goActivity(a)}
+                >
+                  {a.status === 'upcoming' || a.status === 'draft'
+                    ? '活动未开始'
+                    : a.status === 'ended'
+                      ? '查看结果'
+                      : '进入投票'}
+                </Button>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </View>
 
-      {/* 活动说明 */}
-      <View className="px-4 mt-4">
-        <Card className="rounded-lg border-border shadow-none">
-          <CardContent className="p-5">
-            <Text className="block text-sm font-semibold text-foreground">活动说明</Text>
-            <Text className="block text-sm text-muted-foreground leading-7 mt-2">
-              {config?.description ||
-                '为表彰先进、树立榜样，现开展集团年度先进工作者评选活动。'}
-            </Text>
-          </CardContent>
-        </Card>
-      </View>
-
-      {/* 底部操作 */}
-      <View className="px-4 mt-8 pb-10">
-        <Button
-          className="w-full h-12 rounded-md bg-primary text-white"
-          onClick={goVote}
-          disabled={phase === 'not_started'}
+      {/* 管理端入口 */}
+      <View className="text-center mt-6">
+        <Text
+          className="block text-xs text-gray-400"
+          onClick={() => Taro.navigateTo({ url: '/pages/admin/login/index' })}
         >
-          {phase === 'not_started' ? '活动未开始' : phase === 'ended' ? '查看结果' : '进入投票'}
-        </Button>
-
-        {/* 管理端入口（低调展示，需登录后方可进入） */}
-        <View className="text-center mt-4">
-          <Text
-            className="block text-xs text-gray-400"
-            onClick={() => Taro.navigateTo({ url: '/pages/admin/login/index' })}
-          >
-            管理端
-          </Text>
-        </View>
+          管理端
+        </Text>
       </View>
     </View>
   );

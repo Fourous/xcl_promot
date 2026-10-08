@@ -94,6 +94,18 @@ export async function fetchDashboard(token: string, activityId?: number) {
   return res.data as ApiResponse<any>;
 }
 
+/** 完整排名（管理端，不受公示限制） */
+export async function adminFetchRanking(token: string, activityId?: number) {
+  const res = await Network.request({
+    url: '/api/stats/ranking',
+    method: 'GET',
+    header: authHeader(token),
+    data: { activityId: activityId ?? getActivityId() },
+  });
+  console.log('[API] GET /api/stats/ranking ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
 /** 新增候选人 */
 export async function adminCreateCandidate(token: string, body: Record<string, any>) {
   const res = await Network.request({

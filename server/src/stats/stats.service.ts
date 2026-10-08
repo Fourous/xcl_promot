@@ -101,6 +101,45 @@ export class StatsService {
     return data || [];
   }
 
+  /** 完整排名（管理端，不受公示限制） */
+  async ranking(activityId = 1) {
+    const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
+    const [{ data: config }, { data: votes }, { data: candidates }, { count: votedCount }] = await Promise.all([
+      client.from('vote_config').select('*').eq('id', aid).maybeSingle(),
+      client.from('votes').select('candidate_id').eq('activity_id', aid),
+      client.from('candidates').select('*').eq('activity_id', aid),
+      client.from('voters').select('*', { count: 'exact', head: true }).eq('activity_id', aid).eq('has_voted', true),
+    ]);
+    const winnerCount = config?.winner_count || 9;
+    const voteMap = new Map<string, number>();
+    for (const v of votes || []) voteMap.set(v.candidate_id, (voteMap.get(v.candidate_id) || 0) + 1);
+    const total = votes?.length || 0;
+
+    const list = (candidates || [])
+      .map((c) => ({ ...c, votes: voteMap.get(c.id) || 0 }))
+      .sort((a, b) => b.votes - a.votes || String(a.code).localeCompare(String(b.code)))
+      .map((r, i) => ({
+        rank: i + 1,
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        department: r.department,
+        position: r.position,
+        votes: r.votes,
+        rate: total ? Number((r.votes / total).toFixed(4)) : 0,
+        isWinner: i < winnerCount,
+      }));
+
+    return {
+      activityName: config?.activity_name || '',
+      winners: winnerCount,
+      votedCount: votedCount || 0,
+      totalVotes: total,
+      list,
+    };
+  }
+
   /** 导出评选结果表 */
   async exportResult(activityId = 1): Promise<Buffer> {
     const client = getSupabaseClient();

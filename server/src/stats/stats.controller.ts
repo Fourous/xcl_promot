@@ -23,6 +23,13 @@ export class StatsController {
     return { status: 'success', data };
   }
 
+  /** 完整排名（管理端，不受公示限制） */
+  @Get('ranking')
+  async ranking(@Query('activityId') activityId?: string) {
+    const data = await this.service.ranking(Number(activityId) || 1);
+    return { status: 'success', data };
+  }
+
   /** 导出评选结果表 */
   @Get('export')
   async export(@Res() res: Response, @Query('activityId') activityId?: string) {

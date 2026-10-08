@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro';
 import { voterLogin } from '@/services/vote';
 
 const KEY = 'voter_openid';
+const VERIFIED_KEY = 'voter_verified';
 
 /** 读取已登录 openid */
 export function getOpenid(): string {
@@ -29,4 +30,14 @@ export async function ensureLogin(): Promise<string> {
   const { openid } = await voterLogin(code);
   setOpenid(openid);
   return openid;
+}
+
+/** 是否已完成工号校验（绑定） */
+export function isVerified(): boolean {
+  return !!Taro.getStorageSync(VERIFIED_KEY);
+}
+
+/** 设置工号校验状态 */
+export function setVerified(verified: boolean) {
+  Taro.setStorageSync(VERIFIED_KEY, verified);
 }

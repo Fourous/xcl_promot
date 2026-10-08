@@ -18,9 +18,9 @@ export class VotesController {
 
   /** 我的投票记录 */
   @Get('mine')
-  async mine(@Query('openid') openid: string) {
+  async mine(@Query('openid') openid: string, @Query('activityId') activityId?: string) {
     if (!openid) throw new BadRequestException('缺少 openid');
-    const data = await this.service.mine(openid);
+    const data = await this.service.mine(openid, Number(activityId) || 1);
     return { status: 'success', data };
   }
 }

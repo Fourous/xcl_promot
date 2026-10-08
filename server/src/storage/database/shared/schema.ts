@@ -18,11 +18,12 @@ export const healthCheck = pgTable("health_check", {
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow(),
 });
 
-// 候选人
+// 候选人（按活动隔离）
 export const candidates = pgTable(
   "candidates",
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    activity_id: integer("activity_id").default(1).notNull(),
     code: varchar("code", { length: 20 }).notNull(),
     name: varchar("name", { length: 50 }).notNull(),
     department: varchar("department", { length: 100 }).notNull(),
@@ -35,18 +36,20 @@ export const candidates = pgTable(
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("candidates_code_idx").on(table.code),
+    uniqueIndex("candidates_code_idx").on(table.activity_id, table.code),
+    index("candidates_activity_idx").on(table.activity_id),
     index("candidates_status_idx").on(table.status),
     index("candidates_sort_idx").on(table.sort_weight),
   ]
 );
 
-// 投票人
+// 投票人（预置清单：openid 为空，登录校验时绑定；按活动隔离）
 export const voters = pgTable(
   "voters",
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    openid: varchar("openid", { length: 128 }).notNull(),
+    activity_id: integer("activity_id").default(1).notNull(),
+    openid: varchar("openid", { length: 128 }),
     name: varchar("name", { length: 50 }),
     employee_no: varchar("employee_no", { length: 50 }),
     department: varchar("department", { length: 100 }),
@@ -54,14 +57,23 @@ export const voters = pgTable(
     voted_at: timestamp("voted_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [uniqueIndex("voters_openid_idx").on(table.openid)]
+  (table) => [
+    uniqueIndex("voters_openid_idx")
+      .on(table.activity_id, table.openid)
+      .where(sql`openid IS NOT NULL`),
+    uniqueIndex("voters_employee_no_idx")
+      .on(table.activity_id, table.employee_no)
+      .where(sql`employee_no IS NOT NULL`),
+    index("voters_activity_idx").on(table.activity_id),
+  ]
 );
 
-// 投票提交记录（一次提交 = 多张选票）
+// 投票提交记录（一次提交 = 多张选票；按活动隔离）
 export const voteSubmissions = pgTable(
   "vote_submissions",
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    activity_id: integer("activity_id").default(1).notNull(),
     voter_id: varchar("voter_id", { length: 36 }).notNull().references(() => voters.id),
     idempotency_token: varchar("idempotency_token", { length: 128 }).notNull(),
     ip: varchar("ip", { length: 64 }),
@@ -70,16 +82,17 @@ export const voteSubmissions = pgTable(
     submitted_at: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("vote_submissions_voter_idx").on(table.voter_id),
-    uniqueIndex("vote_submissions_token_idx").on(table.idempotency_token),
+    uniqueIndex("vote_submissions_voter_idx").on(table.activity_id, table.voter_id),
+    uniqueIndex("vote_submissions_token_idx").on(table.activity_id, table.idempotency_token),
   ]
 );
 
-// 选票明细
+// 选票明细（按活动隔离）
 export const votes = pgTable(
   "votes",
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    activity_id: integer("activity_id").default(1).notNull(),
     submission_id: varchar("submission_id", { length: 36 }).notNull().references(() => voteSubmissions.id),
     voter_id: varchar("voter_id", { length: 36 }).references(() => voters.id),
     candidate_id: varchar("candidate_id", { length: 36 }).notNull().references(() => candidates.id),
@@ -89,6 +102,7 @@ export const votes = pgTable(
     index("votes_submission_idx").on(table.submission_id),
     index("votes_candidate_idx").on(table.candidate_id),
     index("votes_voter_idx").on(table.voter_id),
+    index("votes_activity_idx").on(table.activity_id),
   ]
 );
 

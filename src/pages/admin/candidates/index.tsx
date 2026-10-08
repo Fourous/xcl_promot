@@ -26,14 +26,15 @@ export default function AdminCandidates() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const load = async (p = 1, append = false) => {
+  const load = async (p = 1, append = false, kw = keyword, st = status) => {
     try {
-      const res = await fetchCandidates({ page: p, pageSize: 20, keyword, status });
+      const res = await fetchCandidates({ page: p, pageSize: 20, keyword: kw || undefined, status: st || undefined });
       setList(append ? [...list, ...res.list] : res.list);
       setTotal(res.total);
       setPage(p);
     } catch (e) {
       console.error('加载候选人失败', e);
+      Taro.showToast({ title: '加载失败', icon: 'none' });
     }
   };
 
@@ -50,7 +51,20 @@ export default function AdminCandidates() {
     if (res.confirm) {
       await adminDeleteCandidate(getToken(), id);
       Taro.showToast({ title: '已删除', icon: 'success' });
-      load(1);
+      load(1, false, keyword, status);
+    }
+  };
+
+  /** 单条启用/停用切换 */
+  const toggleStatus = async (item: Candidate) => {
+    const next = item.status === 'active' ? 'disable' : 'enable';
+    const label = next === 'enable' ? '启用' : '停用';
+    try {
+      await adminBatchCandidates(getToken(), [item.id], next);
+      Taro.showToast({ title: `已${label}「${item.name}」`, icon: 'success' });
+      load(1, false, keyword, status);
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '操作失败', icon: 'none' });
     }
   };
 
@@ -84,7 +98,7 @@ export default function AdminCandidates() {
       await adminBatchCandidates(getToken(), selectedIds, action);
       Taro.showToast({ title: '操作成功', icon: 'success' });
       exitBatchMode();
-      load(1);
+      load(1, false, keyword, status);
     } catch (e: any) {
       Taro.showToast({ title: e?.message || '操作失败', icon: 'none' });
     }
@@ -102,7 +116,7 @@ export default function AdminCandidates() {
             onInput={(e) => setKeyword(e.detail.value)}
           />
         </View>
-        <Button size="sm" onClick={() => load(1)}>搜索</Button>
+        <Button size="sm" onClick={() => load(1, false, keyword, status)}>搜索</Button>
         <Button
           size="sm"
           variant="outline"
@@ -120,7 +134,7 @@ export default function AdminCandidates() {
             variant={status === s ? 'default' : 'outline'}
             onClick={() => {
               setStatus(s);
-              load(1);
+              load(1, false, keyword, s);
             }}
           >
             {s === '' ? '全部' : STATUS_TEXT[s]}
@@ -174,6 +188,13 @@ export default function AdminCandidates() {
               </Button>
               <Button size="sm" variant="outline" onClick={() => handleDelete(item.id)}>
                 删除
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => toggleStatus(item)}
+              >
+                {item.status === 'active' ? '停用' : '启用'}
               </Button>
             </View>
           ) : null}

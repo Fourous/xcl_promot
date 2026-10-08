@@ -8,6 +8,10 @@ import {
   adminDeleteAdmin,
   adminLogs,
   adminArchive,
+  fetchActivities,
+  adminCreateActivity,
+  adminArchiveActivity,
+  adminUpdateActivityStatus,
 } from '@/services/admin';
 import { getToken } from '@/utils/auth';
 import { Button } from '@/components/ui/button';
@@ -15,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
 const TABS = [
+  { key: 'activities', label: '活动管理' },
   { key: 'admins', label: '管理员' },
   { key: 'logs', label: '操作日志' },
   { key: 'archive', label: '数据归档' },
@@ -26,13 +31,30 @@ const ROLE_TEXT: Record<string, string> = {
   auditor: '只读审计',
 };
 
-/** 系统管理：管理员账号、操作日志、数据归档 */
+const ACTIVITY_STATUS: Record<string, string> = {
+  draft: '草稿',
+  upcoming: '未开始',
+  ongoing: '进行中',
+  ended: '已结束',
+  archived: '已归档',
+};
+
+/** 系统管理：活动管理、管理员账号、操作日志、数据归档 */
 export default function SettingsPage() {
-  const [tab, setTab] = useState('admins');
+  const [tab, setTab] = useState('activities');
   const [admins, setAdmins] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ account: '', password: '', name: '', role: 'operator' });
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [activityForm, setActivityForm] = useState({
+    activity_name: '',
+    main_title: '',
+    start_time: '',
+    end_time: '',
+    winner_count: 9,
+  });
 
   const loadAdmins = async () => {
     const res = await adminListAdmins(getToken());
@@ -44,13 +66,62 @@ export default function SettingsPage() {
     setLogs(res.data || []);
   };
 
+  const loadActivities = async () => {
+    const res = await fetchActivities();
+    setActivities(res.data || []);
+  };
+
   useLoad(() => {
+    loadActivities();
     loadAdmins();
   });
 
   const switchTab = (key: string) => {
     setTab(key);
     if (key === 'logs') loadLogs();
+    if (key === 'activities') loadActivities();
+  };
+
+  const handleCreateActivity = async () => {
+    if (!activityForm.activity_name) {
+      Taro.showToast({ title: '请输入活动名称', icon: 'none' });
+      return;
+    }
+    try {
+      await adminCreateActivity(getToken(), {
+        ...activityForm,
+        winner_count: Number(activityForm.winner_count) || 9,
+        status: 'draft',
+      });
+      Taro.showToast({ title: '已创建活动', icon: 'success' });
+      setShowActivityForm(false);
+      setActivityForm({ activity_name: '', main_title: '', start_time: '', end_time: '', winner_count: 9 });
+      loadActivities();
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '创建失败', icon: 'none' });
+    }
+  };
+
+  const handleArchiveActivity = async (id: number) => {
+    const res = await Taro.showModal({ title: '确认归档', content: '归档后该活动不可再投票' });
+    if (!res.confirm) return;
+    try {
+      await adminArchiveActivity(getToken(), id);
+      Taro.showToast({ title: '已归档', icon: 'success' });
+      loadActivities();
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '归档失败', icon: 'none' });
+    }
+  };
+
+  const handleStartActivity = async (id: number) => {
+    try {
+      await adminUpdateActivityStatus(getToken(), id, 'ongoing');
+      Taro.showToast({ title: '已启动活动', icon: 'success' });
+      loadActivities();
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '操作失败', icon: 'none' });
+    }
   };
 
   const handleCreateAdmin = async () => {
@@ -125,6 +196,85 @@ export default function SettingsPage() {
           </Button>
         ))}
       </View>
+
+      {/* 活动管理 */}
+      {tab === 'activities' ? (
+        <View className="px-4 mt-4">
+          <View className="flex flex-row items-center justify-between mb-3">
+            <Text className="block text-base font-bold text-gray-900">活动列表</Text>
+            <Button size="sm" onClick={() => setShowActivityForm((v) => !v)}>
+              {showActivityForm ? '收起' : '新建活动'}
+            </Button>
+          </View>
+
+          {showActivityForm ? (
+            <View className="bg-white rounded-lg p-4 mb-3">
+              <Text className="block text-sm font-bold text-gray-900 mb-3">新建活动</Text>
+              {[
+                { key: 'activity_name', label: '活动名称', placeholder: '如：2026 年度评选活动' },
+                { key: 'main_title', label: '主标题', placeholder: '主视觉标题' },
+              ].map((f) => (
+                <View key={f.key} className="mb-3">
+                  <Text className="block text-xs text-gray-500 mb-1">{f.label}</Text>
+                  <View className="bg-gray-50 rounded-lg px-3 py-2">
+                    <Input
+                      className="w-full bg-transparent"
+                      placeholder={f.placeholder}
+                      value={(activityForm as any)[f.key]}
+                      onInput={(e) => setActivityForm((p) => ({ ...p, [f.key]: e.detail.value }))}
+                    />
+                  </View>
+                </View>
+              ))}
+              <View className="mb-3">
+                <Text className="block text-xs text-gray-500 mb-1">当选名额</Text>
+                <View className="bg-gray-50 rounded-lg px-3 py-2">
+                  <Input
+                    className="w-full bg-transparent"
+                    type="number"
+                    value={String(activityForm.winner_count)}
+                    onInput={(e) =>
+                      setActivityForm((p) => ({ ...p, winner_count: Number(e.detail.value) || 0 }))
+                    }
+                  />
+                </View>
+              </View>
+              <Button className="w-full" onClick={handleCreateActivity}>创建活动</Button>
+            </View>
+          ) : null}
+
+          {activities.map((a: any) => (
+            <View key={a.id} className="bg-white rounded-lg p-4 mb-2">
+              <View className="flex flex-row items-center justify-between">
+                <View className="flex-1">
+                  <Text className="block text-sm font-bold text-gray-900">
+                    {a.activity_name}
+                  </Text>
+                  <Text className="block text-xs text-gray-500 mt-1">
+                    ID {a.id} · {ACTIVITY_STATUS[a.status] || a.status} · 当选 {a.winner_count} 名
+                  </Text>
+                </View>
+                <Badge variant={a.status === 'ongoing' ? 'default' : 'secondary'}>
+                  {ACTIVITY_STATUS[a.status] || a.status}
+                </Badge>
+              </View>
+              <View className="flex flex-row gap-2 mt-3">
+                {a.status !== 'ongoing' && a.status !== 'archived' ? (
+                  <Button size="sm" onClick={() => handleStartActivity(a.id)}>启动</Button>
+                ) : null}
+                {a.status !== 'archived' ? (
+                  <Button size="sm" variant="outline" onClick={() => handleArchiveActivity(a.id)}>
+                    归档
+                  </Button>
+                ) : null}
+              </View>
+            </View>
+          ))}
+          <Text className="block text-xs text-gray-500 mt-2">
+            每个活动拥有独立的候选人、投票人清单与投票数据，互不影响。
+          </Text>
+        </View>
+      ) : null}
 
       {/* 管理员管理 */}
       {tab === 'admins' ? (

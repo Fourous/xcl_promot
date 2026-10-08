@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
-import { fetchDashboard } from '@/services/admin';
+import { fetchDashboard, fetchActivities } from '@/services/admin';
 import { getToken, getAdminInfo } from '@/utils/auth';
+import { getActivityId, setActivityId } from '@/utils/activity';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import StatePage from '@/components/business/state-page';
-import { Users, FileSpreadsheet, Settings, List, Trophy, ShieldCheck } from 'lucide-react-taro';
+import { Users, FileSpreadsheet, Settings, List, Trophy, ShieldCheck, Plus } from 'lucide-react-taro';
 
 const NAV_ITEMS = [
   { key: 'candidates', label: '候选人管理', icon: Users, url: '/pages/admin/candidates/index' },
@@ -18,17 +19,27 @@ const NAV_ITEMS = [
   { key: 'settings', label: '系统管理', icon: ShieldCheck, url: '/pages/admin/settings/index' },
 ];
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: '草稿',
+  upcoming: '未开始',
+  ongoing: '进行中',
+  ended: '已结束',
+  archived: '已归档',
+};
+
 /** 管理端数据看板 */
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshTime, setRefreshTime] = useState('');
+  const [activities, setActivities] = useState<any[]>([]);
+  const [currentId, setCurrentId] = useState(getActivityId());
 
-  const load = async () => {
+  const load = async (aid?: number) => {
     setLoading(true);
     try {
       const token = getToken();
-      const res = await fetchDashboard(token);
+      const res = await fetchDashboard(token, aid);
       setData(res.data);
       setRefreshTime(new Date().toLocaleTimeString());
     } catch (e) {
@@ -38,7 +49,23 @@ export default function Dashboard() {
     }
   };
 
+  const loadActivities = async () => {
+    try {
+      const res = await fetchActivities();
+      setActivities(res.data || []);
+    } catch (e) {
+      console.error('加载活动列表失败', e);
+    }
+  };
+
+  const switchActivity = (id: number) => {
+    setCurrentId(id);
+    setActivityId(id);
+    load(id);
+  };
+
   useLoad(() => {
+    loadActivities();
     load();
   });
 
@@ -58,9 +85,40 @@ export default function Dashboard() {
               {admin?.name || '管理员'} · 刷新于 {refreshTime}
             </Text>
           </View>
-          <Button variant="secondary" size="sm" onClick={load}>
+          <Button variant="secondary" size="sm" onClick={() => load()}>
             刷新
           </Button>
+        </View>
+      </View>
+
+      {/* 活动切换 */}
+      <View className="px-4 -mt-4">
+        <View className="bg-white rounded-lg p-3 mb-4">
+          <View className="flex flex-row items-center justify-between mb-2">
+            <Text className="block text-sm font-bold text-gray-900">当前活动</Text>
+            <View className="flex flex-row items-center" onClick={() => Taro.navigateTo({ url: '/pages/admin/settings/index' })}>
+              <Plus size={14} color="#C80018" />
+              <Text className="text-xs text-[#C80018] ml-1">新建活动</Text>
+            </View>
+          </View>
+          <ScrollView scrollX className="whitespace-nowrap" enhanced showScrollbar={false}>
+            <View className="flex flex-row gap-2">
+              {activities.map((a: any) => (
+                <View
+                  key={a.id}
+                  onClick={() => switchActivity(a.id)}
+                  className={`inline-block px-3 py-2 rounded-md border ${
+                    a.id === currentId ? 'border-[#C80018] bg-red-50' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <Text className={`block text-xs ${a.id === currentId ? 'text-[#C80018] font-bold' : 'text-gray-700'}`}>
+                    {a.activity_name}
+                  </Text>
+                  <Text className="block text-xs text-gray-400 mt-1">{STATUS_LABEL[a.status] || a.status}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
         </View>
       </View>
 

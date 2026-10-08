@@ -1,4 +1,5 @@
 import { Network } from '@/network';
+import { getActivityId } from '@/utils/activity';
 
 interface ApiResponse<T> {
   status: string;
@@ -7,6 +8,45 @@ interface ApiResponse<T> {
 
 function authHeader(token: string) {
   return { Authorization: `Bearer ${token}` };
+}
+
+/** 活动列表 */
+export async function fetchActivities() {
+  const res = await Network.request({ url: '/api/activities' });
+  console.log('[API] GET /api/activities ->', res.data);
+  return res.data as ApiResponse<any[]>;
+}
+
+/** 新建活动 */
+export async function adminCreateActivity(token: string, body: Record<string, any>) {
+  const res = await Network.request({
+    url: '/api/activities',
+    method: 'POST',
+    header: authHeader(token),
+    data: body,
+  });
+  return res.data as ApiResponse<any>;
+}
+
+/** 归档活动 */
+export async function adminArchiveActivity(token: string, id: number) {
+  const res = await Network.request({
+    url: `/api/activities/${id}/archive`,
+    method: 'POST',
+    header: authHeader(token),
+  });
+  return res.data as ApiResponse<any>;
+}
+
+/** 更新活动状态 */
+export async function adminUpdateActivityStatus(token: string, id: number, status: string) {
+  const res = await Network.request({
+    url: `/api/activities/${id}/status`,
+    method: 'POST',
+    header: authHeader(token),
+    data: { status },
+  });
+  return res.data as ApiResponse<any>;
 }
 
 /** 获取图形验证码 */
@@ -43,11 +83,12 @@ export async function adminProfile(token: string) {
 }
 
 /** 数据看板 */
-export async function fetchDashboard(token: string) {
+export async function fetchDashboard(token: string, activityId?: number) {
   const res = await Network.request({
     url: '/api/stats/dashboard',
     method: 'GET',
     header: authHeader(token),
+    data: { activityId: activityId ?? getActivityId() },
   });
   console.log('[API] GET /api/stats/dashboard ->', res.data);
   return res.data as ApiResponse<any>;
@@ -59,7 +100,7 @@ export async function adminCreateCandidate(token: string, body: Record<string, a
     url: '/api/candidates',
     method: 'POST',
     header: authHeader(token),
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -70,7 +111,7 @@ export async function adminUpdateCandidate(token: string, id: string, body: Reco
     url: `/api/candidates/${id}`,
     method: 'PUT',
     header: authHeader(token),
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -81,6 +122,7 @@ export async function adminDeleteCandidate(token: string, id: string) {
     url: `/api/candidates/${id}`,
     method: 'DELETE',
     header: authHeader(token),
+    data: { activityId: getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -91,7 +133,7 @@ export async function adminBatchCandidates(token: string, ids: string[], action:
     url: '/api/candidates/batch',
     method: 'POST',
     header: authHeader(token),
-    data: { ids, action },
+    data: { ids, action, activityId: getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -102,7 +144,7 @@ export async function adminSaveConfig(token: string, body: Record<string, any>) 
     url: '/api/config',
     method: 'PUT',
     header: authHeader(token),
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -113,7 +155,7 @@ export async function adminVoteRecords(token: string, params: Record<string, any
     url: '/api/stats/records',
     method: 'GET',
     header: authHeader(token),
-    data: params,
+    data: { ...params, activityId: params.activityId ?? getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }
@@ -125,6 +167,7 @@ export async function adminParseImport(token: string, filePath: string) {
     filePath,
     name: 'file',
     header: authHeader(token),
+    formData: { activityId: String(getActivityId()) },
   });
   console.log('[API] POST /api/import/parse ->', res.data);
   return JSON.parse(res.data) as ApiResponse<any>;
@@ -136,7 +179,7 @@ export async function adminCommitImport(token: string, body: Record<string, any>
     url: '/api/import/commit',
     method: 'POST',
     header: authHeader(token),
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   return res.data as ApiResponse<any>;
 }

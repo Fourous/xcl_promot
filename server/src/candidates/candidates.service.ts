@@ -21,6 +21,7 @@ export interface CandidateListQuery {
   department?: string;
   keyword?: string;
   status?: string;
+  activityId?: number;
 }
 
 @Injectable()
@@ -32,11 +33,13 @@ export class CandidatesService {
     const client = getSupabaseClient();
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 20;
+    const activityId = Number(query.activityId) || 1;
 
     // 使用 count: 'exact' 获取总行数（不受 range 影响）
     let builder = client
       .from('candidates')
-      .select('*', { count: 'exact' });
+      .select('*', { count: 'exact' })
+      .eq('activity_id', activityId);
 
     if (query.department) {
       builder = builder.eq('department', query.department);
@@ -68,11 +71,12 @@ export class CandidatesService {
   /**
    * 获取去重后的部门列表（用于部门筛选）
    */
-  async departments() {
+  async departments(activityId = 1) {
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('candidates')
       .select('department')
+      .eq('activity_id', Number(activityId) || 1)
       .order('department', { ascending: true });
 
     if (error) throw new Error(`部门查询失败: ${error.message}`);
@@ -83,11 +87,12 @@ export class CandidatesService {
   }
 
   /** 新增候选人 */
-  async create(body: any) {
+  async create(body: any, activityId = 1) {
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('candidates')
       .insert({
+        activity_id: Number(activityId) || 1,
         code: body.code,
         name: body.name,
         department: body.department,
@@ -107,7 +112,7 @@ export class CandidatesService {
   }
 
   /** 编辑候选人 */
-  async update(id: string, body: any) {
+  async update(id: string, body: any, activityId = 1) {
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('candidates')
@@ -123,6 +128,7 @@ export class CandidatesService {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('activity_id', Number(activityId) || 1)
       .select()
       .single();
     if (error) {
@@ -133,18 +139,27 @@ export class CandidatesService {
   }
 
   /** 删除候选人 */
-  async remove(id: string) {
+  async remove(id: string, activityId = 1) {
     const client = getSupabaseClient();
-    const { error } = await client.from('candidates').delete().eq('id', id);
+    const { error } = await client
+      .from('candidates')
+      .delete()
+      .eq('id', id)
+      .eq('activity_id', Number(activityId) || 1);
     if (error) throw new BadRequestException(`删除失败: ${error.message}`);
     return { deleted: true };
   }
 
   /** 批量操作：enable / disable / delete */
-  async batchAction(ids: string[], action: string) {
+  async batchAction(ids: string[], action: string, activityId = 1) {
     const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
     if (action === 'delete') {
-      const { error } = await client.from('candidates').delete().in('id', ids);
+      const { error } = await client
+        .from('candidates')
+        .delete()
+        .in('id', ids)
+        .eq('activity_id', aid);
       if (error) throw new BadRequestException(`批量删除失败: ${error.message}`);
       return { deleted: ids.length };
     }
@@ -152,7 +167,8 @@ export class CandidatesService {
     const { error } = await client
       .from('candidates')
       .update({ status, updated_at: new Date().toISOString() })
-      .in('id', ids);
+      .in('id', ids)
+      .eq('activity_id', aid);
     if (error) throw new BadRequestException(`批量操作失败: ${error.message}`);
     return { updated: ids.length };
   }

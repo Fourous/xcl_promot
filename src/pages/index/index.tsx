@@ -3,7 +3,8 @@ import Taro, { useLoad } from '@tarojs/taro';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { fetchConfig, VoteConfig } from '@/services/vote';
+import { fetchConfig, fetchCurrentActivity, VoteConfig } from '@/services/vote';
+import { setActivityId } from '@/utils/activity';
 
 /** 格式化倒计时为「X 天 X 时 X 分 X 秒」 */
 function formatCountdown(ms: number): string {
@@ -29,6 +30,9 @@ const IndexPage = () => {
 
   useLoad(async () => {
     try {
+      // 确定当前活动并写入全局，保证后续请求按活动隔离
+      const current = await fetchCurrentActivity();
+      if (current?.id) setActivityId(current.id);
       const cfg = await fetchConfig();
       setConfig(cfg);
     } catch (e) {

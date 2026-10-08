@@ -20,9 +20,10 @@ export class ImportService {
   }
 
   /** 解析并校验上传文件（返回校验预览，不落库） */
-  async parse(file: Express.Multer.File) {
+  async parse(file: Express.Multer.File, activityId = 1) {
     const buffer = file.buffer || (file.path ? await readFile(file.path) : null);
     if (!buffer) throw new BadRequestException('无法读取文件内容');
+    const aid = Number(activityId) || 1;
 
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -31,7 +32,7 @@ export class ImportService {
     const dataRows = rows.slice(1).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
 
     const client = getSupabaseClient();
-    const { data: existing } = await client.from('candidates').select('code,name,department');
+    const { data: existing } = await client.from('candidates').select('code,name,department').eq('activity_id', aid);
     const existingCodes = new Set((existing || []).map((e: any) => String(e.code).trim()));
     const existingNameDept = new Set((existing || []).map((e: any) => `${e.department}:${e.name}`));
 
@@ -95,20 +96,22 @@ export class ImportService {
   }
 
   /** 确认导入（追加/覆盖） */
-  async commit(body: any, operator: string) {
+  async commit(body: any, operator: string, activityId = 1) {
     const { mode, rows, errors, fileName } = body || {};
     if (!rows?.length) throw new BadRequestException('无可导入数据');
     const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
 
     if (mode === 'overwrite') {
       const { error: delErr } = await client
         .from('candidates')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
+        .eq('activity_id', aid);
       if (delErr) throw new BadRequestException(`清空失败: ${delErr.message}`);
     }
 
     const insertRows = rows.map((r: any) => ({
+      activity_id: aid,
       code: r.code,
       name: r.name,
       department: r.department,

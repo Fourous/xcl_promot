@@ -36,9 +36,9 @@ export class ImportController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   @UseInterceptors(FileInterceptor('file'))
-  async parse(@UploadedFile() file: Express.Multer.File) {
+  async parse(@UploadedFile() file: Express.Multer.File, @Body('activityId') activityId?: string) {
     if (!file) throw new Error('未接收到文件');
-    const data = await this.service.parse(file);
+    const data = await this.service.parse(file, Number(activityId) || 1);
     return { status: 'success', data };
   }
 
@@ -48,7 +48,7 @@ export class ImportController {
   @UseGuards(AuthGuard, WritePermissionGuard)
   async commit(@Body() body: Record<string, any>, @Req() req: Request) {
     const admin = (req as any).admin;
-    const data = await this.service.commit(body, admin?.account || 'unknown');
+    const data = await this.service.commit(body, admin?.account || 'unknown', body.activityId);
     return { status: 'success', data };
   }
 

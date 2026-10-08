@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, Picker } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { fetchConfig, VoteConfig } from '@/services/vote';
 import { adminSaveConfig } from '@/services/admin';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 
-type FieldType = 'text' | 'number' | 'textarea' | 'boolean';
+type FieldType = 'text' | 'number' | 'textarea' | 'boolean' | 'datetime';
 
 interface FieldDef {
   key: keyof VoteConfig;
@@ -32,9 +32,9 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
   {
     title: '时间设置',
     fields: [
-      { key: 'start_time', label: '投票开始时间', type: 'text', placeholder: '2026-01-01 00:00:00' },
-      { key: 'end_time', label: '投票结束时间', type: 'text', placeholder: '2027-01-31 23:59:59' },
-      { key: 'result_publish_time', label: '结果公示时间', type: 'text', placeholder: '2027-02-01 00:00:00' },
+      { key: 'start_time', label: '投票开始时间', type: 'datetime' },
+      { key: 'end_time', label: '投票结束时间', type: 'datetime' },
+      { key: 'result_publish_time', label: '结果公示时间', type: 'datetime' },
     ],
   },
   {
@@ -95,10 +95,34 @@ export default function ConfigPage() {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
+  /** 设置日期时间（组合 date + time 为 YYYY-MM-DD HH:mm:ss） */
+  const setDateTime = (key: keyof VoteConfig, date: string, time: string) => {
+    setField(key, `${date} ${time}:00`);
+  };
+
+  /** 拆分日期时间为 { date, time } */
+  const splitDateTime = (val: string | null | undefined) => {
+    const raw = String(val || '').replace('T', ' ').replace('Z', '').slice(0, 16);
+    const [date, time] = raw.split(' ');
+    return { date: date || '2026-01-01', time: time || '00:00' };
+  };
+
   const handleSave = async () => {
     if (!config) return;
     if (config.min_picks > config.max_picks) {
       Taro.showToast({ title: '最少可选不能大于最多可选', icon: 'none' });
+      return;
+    }
+    // 时间区间校验
+    const start = config.start_time ? new Date(config.start_time).getTime() : 0;
+    const end = config.end_time ? new Date(config.end_time).getTime() : 0;
+    const publish = config.result_publish_time ? new Date(config.result_publish_time).getTime() : 0;
+    if (start && end && start >= end) {
+      Taro.showToast({ title: '开始时间必须早于结束时间', icon: 'none' });
+      return;
+    }
+    if (end && publish && end > publish) {
+      Taro.showToast({ title: '结果公示时间必须晚于结束时间', icon: 'none' });
       return;
     }
     setSaving(true);
@@ -145,6 +169,38 @@ export default function ConfigPage() {
                       value={(config[f.key] as string) || ''}
                       onInput={(e) => setField(f.key, e.detail.value)}
                     />
+                  </View>
+                </>
+              ) : f.type === 'datetime' ? (
+                <>
+                  <Text className="block text-sm font-bold text-gray-700 mb-2">{f.label}</Text>
+                  <View className="flex flex-row gap-3">
+                    <Picker
+                      mode="date"
+                      value={splitDateTime(config[f.key] as string).date}
+                      onChange={(e) =>
+                        setDateTime(f.key, e.detail.value, splitDateTime(config[f.key] as string).time)
+                      }
+                    >
+                      <View className="bg-gray-50 rounded-lg px-4 py-3 flex-1">
+                        <Text className="block text-sm tabular-nums">
+                          {splitDateTime(config[f.key] as string).date}
+                        </Text>
+                      </View>
+                    </Picker>
+                    <Picker
+                      mode="time"
+                      value={splitDateTime(config[f.key] as string).time}
+                      onChange={(e) =>
+                        setDateTime(f.key, splitDateTime(config[f.key] as string).date, e.detail.value)
+                      }
+                    >
+                      <View className="bg-gray-50 rounded-lg px-4 py-3 flex-1">
+                        <Text className="block text-sm tabular-nums">
+                          {splitDateTime(config[f.key] as string).time}
+                        </Text>
+                      </View>
+                    </Picker>
                   </View>
                 </>
               ) : (

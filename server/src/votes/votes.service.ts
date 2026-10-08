@@ -18,9 +18,10 @@ export class VotesService {
     if (!openid || !candidateIds?.length || !idempotencyToken) {
       throw new BadRequestException('参数不完整');
     }
+    const activityId = Number(body.activityId) || 1;
 
     // 1. 读取规则配置
-    const { data: config } = await client.from('vote_config').select('*').eq('id', 1).single();
+    const { data: config } = await client.from('vote_config').select('*').eq('id', activityId).single();
     if (!config) throw new BadRequestException('投票规则未配置');
 
     // 2. 服务端时间窗口校验
@@ -46,6 +47,7 @@ export class VotesService {
     const { data: candidates } = await client
       .from('candidates')
       .select('id,status')
+      .eq('activity_id', activityId)
       .in('id', candidateIds);
     if (!candidates || candidates.length !== candidateIds.length) {
       throw new BadRequestException('存在无效候选人');
@@ -58,6 +60,7 @@ export class VotesService {
     const { data: existingSub } = await client
       .from('vote_submissions')
       .select('id')
+      .eq('activity_id', activityId)
       .eq('idempotency_token', idempotencyToken)
       .maybeSingle();
     if (existingSub) {
@@ -65,7 +68,12 @@ export class VotesService {
     }
 
     // 7. 投票人校验（一人一轮一票）
-    const { data: voter } = await client.from('voters').select('*').eq('openid', openid).maybeSingle();
+    const { data: voter } = await client
+      .from('voters')
+      .select('*')
+      .eq('activity_id', activityId)
+      .eq('openid', openid)
+      .maybeSingle();
     if (!voter) throw new BadRequestException('投票人不存在');
     if (voter.has_voted) throw new BadRequestException('您已投过票');
 
@@ -73,6 +81,7 @@ export class VotesService {
     const { data: submission, error: subErr } = await client
       .from('vote_submissions')
       .insert({
+        activity_id: activityId,
         voter_id: voter.id,
         idempotency_token: idempotencyToken,
         ip: body.ip || null,
@@ -88,6 +97,7 @@ export class VotesService {
 
     // 9. 写入选票明细（匿名时 voter_id 置空，仅统计票数）
     const voteRows = candidateIds.map((cid) => ({
+      activity_id: activityId,
       submission_id: submission.id,
       voter_id: config.anonymous ? null : voter.id,
       candidate_id: cid,
@@ -113,12 +123,14 @@ export class VotesService {
   }
 
   /** 我的投票记录（匿名模式不返回具体对象） */
-  async mine(openid: string) {
+  async mine(openid: string, activityId = 1) {
     const client = getSupabaseClient();
-    const { data: config } = await client.from('vote_config').select('anonymous').eq('id', 1).single();
+    const aid = Number(activityId) || 1;
+    const { data: config } = await client.from('vote_config').select('anonymous').eq('id', aid).single();
     const { data: voter } = await client
       .from('voters')
       .select('id,has_voted,voted_at')
+      .eq('activity_id', aid)
       .eq('openid', openid)
       .maybeSingle();
 
@@ -131,6 +143,7 @@ export class VotesService {
     const { data: votes } = await client
       .from('votes')
       .select('candidate_id, candidates(code,name,department,position)')
+      .eq('activity_id', aid)
       .eq('voter_id', voter.id);
     return { hasVoted: true, votedAt: voter.voted_at, anonymous: false, picks: votes || [] };
   }

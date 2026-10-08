@@ -25,6 +25,7 @@ export class CandidatesController {
     @Query('department') department?: string,
     @Query('keyword') keyword?: string,
     @Query('status') status?: string,
+    @Query('activityId') activityId?: string,
   ) {
     const data = await this.candidatesService.list({
       page: Number(page) || 1,
@@ -32,14 +33,15 @@ export class CandidatesController {
       department,
       keyword,
       status,
+      activityId: Number(activityId) || 1,
     });
     return { status: 'success', data };
   }
 
   /** GET /api/candidates/departments —— 部门列表 */
   @Get('departments')
-  async departments() {
-    const data = await this.candidatesService.departments();
+  async departments(@Query('activityId') activityId?: string) {
+    const data = await this.candidatesService.departments(Number(activityId) || 1);
     return { status: 'success', data };
   }
 
@@ -48,7 +50,7 @@ export class CandidatesController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   async create(@Body() body: Record<string, any>) {
-    const data = await this.candidatesService.create(body);
+    const data = await this.candidatesService.create(body, body.activityId);
     return { status: 'success', data };
   }
 
@@ -57,7 +59,7 @@ export class CandidatesController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   async batch(@Body() body: Record<string, any>) {
-    const data = await this.candidatesService.batchAction(body.ids, body.action);
+    const data = await this.candidatesService.batchAction(body.ids, body.action, body.activityId);
     return { status: 'success', data };
   }
 
@@ -75,7 +77,7 @@ export class CandidatesController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   async update(@Param('id') id: string, @Body() body: Record<string, any>) {
-    const data = await this.candidatesService.update(id, body);
+    const data = await this.candidatesService.update(id, body, body.activityId);
     return { status: 'success', data };
   }
 
@@ -83,8 +85,8 @@ export class CandidatesController {
   @Delete(':id')
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
-  async remove(@Param('id') id: string) {
-    const data = await this.candidatesService.remove(id);
+  async remove(@Param('id') id: string, @Body() body: Record<string, any>) {
+    const data = await this.candidatesService.remove(id, body?.activityId);
     return { status: 'success', data };
   }
 }

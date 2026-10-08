@@ -1,4 +1,5 @@
 import { Network } from '@/network';
+import { getActivityId } from '@/utils/activity';
 
 /** 候选人 */
 export interface Candidate {
@@ -55,9 +56,24 @@ export interface CandidatePage {
   pageSize: number;
 }
 
+/** 获取活动列表 */
+export async function fetchActivities(): Promise<VoteConfig[]> {
+  const res = await Network.request({ url: '/api/activities' });
+  console.log('[API] GET /api/activities ->', res.data);
+  return (res.data as ApiResponse<VoteConfig[]>).data;
+}
+
+/** 获取当前活动（投票端入口） */
+export async function fetchCurrentActivity(): Promise<VoteConfig | null> {
+  const res = await Network.request({ url: '/api/activities/current' });
+  console.log('[API] GET /api/activities/current ->', res.data);
+  return (res.data as ApiResponse<VoteConfig | null>).data;
+}
+
 /** 获取活动配置 */
-export async function fetchConfig(): Promise<VoteConfig> {
-  const res = await Network.request({ url: '/api/config' });
+export async function fetchConfig(activityId?: number): Promise<VoteConfig> {
+  const aid = activityId ?? getActivityId();
+  const res = await Network.request({ url: '/api/config', data: { activityId: aid } });
   console.log('[API] GET /api/config ->', res.data);
   return (res.data as ApiResponse<VoteConfig>).data;
 }
@@ -69,44 +85,49 @@ export async function fetchCandidates(params: {
   department?: string;
   keyword?: string;
   status?: string;
+  activityId?: number;
 }): Promise<CandidatePage> {
   const res = await Network.request({
     url: '/api/candidates',
     method: 'GET',
-    data: params,
+    data: { ...params, activityId: params.activityId ?? getActivityId() },
   });
   console.log('[API] GET /api/candidates ->', res.data);
   return (res.data as ApiResponse<CandidatePage>).data;
 }
 
 /** 获取部门列表 */
-export async function fetchDepartments(): Promise<string[]> {
-  const res = await Network.request({ url: '/api/candidates/departments' });
+export async function fetchDepartments(activityId?: number): Promise<string[]> {
+  const res = await Network.request({
+    url: '/api/candidates/departments',
+    data: { activityId: activityId ?? getActivityId() },
+  });
   console.log('[API] GET /api/candidates/departments ->', res.data);
   return (res.data as ApiResponse<string[]>).data;
 }
 
 /** 投票人登录（code -> openid） */
-export async function voterLogin(code: string): Promise<{ openid: string }> {
+export async function voterLogin(code: string, activityId?: number): Promise<{ openid: string }> {
   const res = await Network.request({
     url: '/api/vote-auth/login',
     method: 'POST',
-    data: { code },
+    data: { code, activityId: activityId ?? getActivityId() },
   });
   console.log('[API] POST /api/vote-auth/login ->', res.data);
   return (res.data as ApiResponse<{ openid: string }>).data;
 }
 
-/** 工号/姓名校验（可选） */
+/** 工号/姓名校验 */
 export async function verifyVoter(body: {
   openid: string;
   employeeNo?: string;
   name?: string;
+  activityId?: number;
 }) {
   const res = await Network.request({
     url: '/api/vote-auth/verify',
     method: 'POST',
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   console.log('[API] POST /api/vote-auth/verify ->', res.data);
   return res.data as ApiResponse<any>;
@@ -117,30 +138,34 @@ export async function submitVote(body: {
   openid: string;
   candidateIds: string[];
   idempotencyToken: string;
+  activityId?: number;
 }) {
   const res = await Network.request({
     url: '/api/votes',
     method: 'POST',
-    data: body,
+    data: { ...body, activityId: body.activityId ?? getActivityId() },
   });
   console.log('[API] POST /api/votes ->', res.data);
   return res.data as ApiResponse<any>;
 }
 
 /** 我的投票记录 */
-export async function fetchMyVote(openid: string) {
+export async function fetchMyVote(openid: string, activityId?: number) {
   const res = await Network.request({
     url: '/api/votes/mine',
     method: 'GET',
-    data: { openid },
+    data: { openid, activityId: activityId ?? getActivityId() },
   });
   console.log('[API] GET /api/votes/mine ->', res.data);
   return res.data as ApiResponse<any>;
 }
 
 /** 结果排名 */
-export async function fetchResults() {
-  const res = await Network.request({ url: '/api/results' });
+export async function fetchResults(activityId?: number) {
+  const res = await Network.request({
+    url: '/api/results',
+    data: { activityId: activityId ?? getActivityId() },
+  });
   console.log('[API] GET /api/results ->', res.data);
   return res.data as ApiResponse<any>;
 }

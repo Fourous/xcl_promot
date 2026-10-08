@@ -9,18 +9,18 @@ export class VoteAuthController {
   /** 微信登录：返回 openid 及投票状态 */
   @Post('login')
   @HttpCode(200)
-  async login(@Body() body: { code: string }) {
+  async login(@Body() body: { code: string; activityId?: number }) {
     if (!body?.code) throw new BadRequestException('缺少登录凭证 code');
-    const data = await this.service.login(body.code);
+    const data = await this.service.login(body.code, body.activityId);
     return { status: 'success', data };
   }
 
   /** 工号/姓名补充校验（可选开启） */
   @Post('verify')
   @HttpCode(200)
-  async verify(@Body() body: { openid: string; employeeNo: string; name: string }) {
+  async verify(@Body() body: { openid: string; employeeNo: string; name: string; activityId?: number }) {
     if (!body?.openid) throw new BadRequestException('缺少 openid');
-    const data = await this.service.verify(body.openid, body.employeeNo, body.name);
+    const data = await this.service.verify(body.openid, body.employeeNo, body.name, body.activityId);
     return { status: 'success', data };
   }
 }

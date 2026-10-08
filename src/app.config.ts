@@ -1,6 +1,7 @@
 export default defineAppConfig({
   pages: [
     'pages/index/index',
+    'pages/vote/login/index',
     'pages/vote/candidates/index',
     'pages/vote/detail/index',
     'pages/vote/success/index',

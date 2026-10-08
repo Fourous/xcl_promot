@@ -31,13 +31,13 @@ export interface VoteConfig {
 
 @Injectable()
 export class ConfigService {
-  /** 获取投票规则配置（单行，id 固定为 1） */
-  async get() {
+  /** 获取投票规则配置（按活动 id） */
+  async get(activityId = 1) {
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('vote_config')
       .select('*')
-      .eq('id', 1)
+      .eq('id', activityId)
       .maybeSingle();
 
     if (error) throw new Error(`配置查询失败: ${error.message}`);
@@ -45,7 +45,7 @@ export class ConfigService {
   }
 
   /** 保存投票规则配置（立即生效，保存前完整性校验） */
-  async update(body: any) {
+  async update(activityId: number, body: any) {
     if (body.min_picks != null && body.max_picks != null && body.min_picks > body.max_picks) {
       throw new BadRequestException('最少可选人数不能大于最多可选人数');
     }
@@ -85,7 +85,7 @@ export class ConfigService {
         status: body.status,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', 1)
+      .eq('id', activityId)
       .select()
       .single();
     if (error) throw new BadRequestException(`配置保存失败: ${error.message}`);

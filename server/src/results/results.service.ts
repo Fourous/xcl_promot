@@ -4,9 +4,10 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 /** 结果统计服务：票数聚合、得票率、排名与当选标识 */
 @Injectable()
 export class ResultsService {
-  async rank() {
+  async rank(activityId = 1) {
     const client = getSupabaseClient();
-    const { data: config } = await client.from('vote_config').select('*').eq('id', 1).single();
+    const aid = Number(activityId) || 1;
+    const { data: config } = await client.from('vote_config').select('*').eq('id', aid).single();
     if (!config) throw new BadRequestException('投票规则未配置');
 
     // 结果可见性：实时公示开启，或已到结果公示时间，或活动已结束
@@ -21,19 +22,20 @@ export class ResultsService {
     }
 
     // 选票明细
-    const { data: voteRows } = await client.from('votes').select('candidate_id');
+    const { data: voteRows } = await client.from('votes').select('candidate_id').eq('activity_id', aid);
     const voteCount: Record<string, number> = {};
     for (const v of voteRows || []) {
       voteCount[v.candidate_id] = (voteCount[v.candidate_id] || 0) + 1;
     }
 
     // 候选人（仅统计启用中的）
-    const { data: candidates } = await client.from('candidates').select('*').eq('status', 'active');
+    const { data: candidates } = await client.from('candidates').select('*').eq('activity_id', aid).eq('status', 'active');
 
     // 已投票人数
     const { count: votedCount } = await client
       .from('voters')
       .select('*', { count: 'exact', head: true })
+      .eq('activity_id', aid)
       .eq('has_voted', true);
 
     const totalVotes = (voteRows || []).length;

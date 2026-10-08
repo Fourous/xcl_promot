@@ -1,6 +1,6 @@
 import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useLoad, useReachBottom } from '@tarojs/taro';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,7 @@ import {
   toggleSelect as toggleSelectUtil,
   clearSelection,
 } from '@/utils/selection';
-import { ensureLogin } from '@/utils/session';
+import { ensureLogin, isVerified } from '@/utils/session';
 
 const PAGE_SIZE = 20;
 
@@ -35,6 +35,7 @@ const CandidatesPage = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const maxPicks = config?.max_picks ?? 9;
   const minPicks = config?.min_picks ?? 1;
@@ -53,6 +54,7 @@ const CandidatesPage = () => {
         pageSize: PAGE_SIZE,
         keyword: kw || undefined,
         department: dept || undefined,
+        status: 'active',
       });
       setTotal(res.total);
       if (append) {
@@ -73,9 +75,13 @@ const CandidatesPage = () => {
     // 恢复已选状态
     setSelected(getSelectedIds());
 
-    // 已投票用户直接进入「我的投票」状态页
+    // 未完成工号校验则跳转登录页；已投票用户直接进入「我的投票」状态页
     try {
       const openid = await ensureLogin();
+      if (!isVerified()) {
+        Taro.redirectTo({ url: '/pages/vote/login/index' });
+        return;
+      }
       const myRes = await fetchMyVote(openid);
       if (myRes.data?.hasVoted) {
         Taro.redirectTo({ url: '/pages/vote/mine/index' });
@@ -113,8 +119,18 @@ const CandidatesPage = () => {
     setSelected(ids);
   };
 
-  /** 搜索 */
+  /** 实时搜索（防抖 300ms） */
+  const onKeywordChange = (val: string) => {
+    setKeyword(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      loadCandidates(1, false, val, department);
+    }, 300);
+  };
+
+  /** 立即搜索（点击搜索按钮 / 键盘确认） */
   const handleSearch = () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
     loadCandidates(1, false, keyword, department);
   };
 
@@ -156,7 +172,8 @@ const CandidatesPage = () => {
           <View className="flex-1">
             <Input
               value={keyword}
-              onInput={(e) => setKeyword(e.detail.value)}
+              onInput={(e) => onKeywordChange(e.detail.value)}
+              onConfirm={handleSearch}
               placeholder="搜索姓名或编号"
             />
           </View>

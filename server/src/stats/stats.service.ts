@@ -6,21 +6,22 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 @Injectable()
 export class StatsService {
   /** 数据看板：核心指标 + 实时排名前9 + 趋势 + 部门参与度 */
-  async dashboard() {
+  async dashboard(activityId = 1) {
     const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
 
     const [{ count: totalCandidates }, { count: votedCount }, { count: totalVotes }, { data: config }] =
       await Promise.all([
-        client.from('candidates').select('*', { count: 'exact', head: true }),
-        client.from('voters').select('*', { count: 'exact', head: true }).eq('has_voted', true),
-        client.from('votes').select('*', { count: 'exact', head: true }),
-        client.from('vote_config').select('*').eq('id', 1).maybeSingle(),
+        client.from('candidates').select('*', { count: 'exact', head: true }).eq('activity_id', aid),
+        client.from('voters').select('*', { count: 'exact', head: true }).eq('activity_id', aid).eq('has_voted', true),
+        client.from('votes').select('*', { count: 'exact', head: true }).eq('activity_id', aid),
+        client.from('vote_config').select('*').eq('id', aid).maybeSingle(),
       ]);
 
     // 排名（全部候选人按票数降序）
     const [{ data: votes }, { data: candidates }] = await Promise.all([
-      client.from('votes').select('candidate_id'),
-      client.from('candidates').select('*'),
+      client.from('votes').select('candidate_id').eq('activity_id', aid),
+      client.from('candidates').select('*').eq('activity_id', aid),
     ]);
     const voteMap = new Map<string, number>();
     for (const v of votes || []) {
@@ -43,7 +44,7 @@ export class StatsService {
     const top9 = ranking.slice(0, 9);
 
     // 投票趋势（按天）
-    const { data: submissions } = await client.from('vote_submissions').select('submitted_at');
+    const { data: submissions } = await client.from('vote_submissions').select('submitted_at').eq('activity_id', aid);
     const trendMap = new Map<string, number>();
     for (const s of submissions || []) {
       const day = String(s.submitted_at || '').slice(0, 10);
@@ -54,7 +55,7 @@ export class StatsService {
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // 部门参与度（已投票人按部门）
-    const { data: voters } = await client.from('voters').select('department').eq('has_voted', true);
+    const { data: voters } = await client.from('voters').select('department').eq('activity_id', aid).eq('has_voted', true);
     const deptMap = new Map<string, number>();
     for (const v of voters || []) {
       const d = v.department || '未知部门';
@@ -80,12 +81,13 @@ export class StatsService {
   /** 投票记录查询（多条件筛选） */
   async records(query: Record<string, any>) {
     const client = getSupabaseClient();
+    const aid = Number(query.activityId) || 1;
     let builder = client.from('votes').select(
       'id, candidate_id, voter_id, created_at, candidates(code,name,department), voters(name,employee_no,department)',
-    );
+    ).eq('activity_id', aid);
 
     if (query.department) {
-      const { data: cands } = await client.from('candidates').select('id').eq('department', query.department);
+      const { data: cands } = await client.from('candidates').select('id').eq('activity_id', aid).eq('department', query.department);
       const ids = (cands || []).map((c) => c.id);
       if (ids.length) builder = builder.in('candidate_id', ids);
       else builder = builder.eq('candidate_id', '__none__');
@@ -100,12 +102,13 @@ export class StatsService {
   }
 
   /** 导出评选结果表 */
-  async exportResult(): Promise<Buffer> {
+  async exportResult(activityId = 1): Promise<Buffer> {
     const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
     const [{ data: config }, { data: votes }, { data: candidates }] = await Promise.all([
-      client.from('vote_config').select('*').eq('id', 1).maybeSingle(),
-      client.from('votes').select('candidate_id'),
-      client.from('candidates').select('*'),
+      client.from('vote_config').select('*').eq('id', aid).maybeSingle(),
+      client.from('votes').select('candidate_id').eq('activity_id', aid),
+      client.from('candidates').select('*').eq('activity_id', aid),
     ]);
     const winnerCount = config?.winner_count || 9;
     const voteMap = new Map<string, number>();

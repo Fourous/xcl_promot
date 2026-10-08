@@ -11,8 +11,8 @@ export class StatsController {
 
   /** 数据看板 */
   @Get('dashboard')
-  async dashboard() {
-    const data = await this.service.dashboard();
+  async dashboard(@Query('activityId') activityId?: string) {
+    const data = await this.service.dashboard(Number(activityId) || 1);
     return { status: 'success', data };
   }
 
@@ -25,8 +25,8 @@ export class StatsController {
 
   /** 导出评选结果表 */
   @Get('export')
-  async export(@Res() res: Response) {
-    const buffer = await this.service.exportResult();
+  async export(@Res() res: Response, @Query('activityId') activityId?: string) {
+    const buffer = await this.service.exportResult(Number(activityId) || 1);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''result.xlsx");
     res.send(buffer);

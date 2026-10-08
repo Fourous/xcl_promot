@@ -85,3 +85,62 @@ export async function fetchDepartments(): Promise<string[]> {
   console.log('[API] GET /api/candidates/departments ->', res.data);
   return (res.data as ApiResponse<string[]>).data;
 }
+
+/** 投票人登录（code -> openid） */
+export async function voterLogin(code: string): Promise<{ openid: string }> {
+  const res = await Network.request({
+    url: '/api/vote-auth/login',
+    method: 'POST',
+    data: { code },
+  });
+  console.log('[API] POST /api/vote-auth/login ->', res.data);
+  return (res.data as ApiResponse<{ openid: string }>).data;
+}
+
+/** 工号/姓名校验（可选） */
+export async function verifyVoter(body: {
+  openid: string;
+  employeeNo?: string;
+  name?: string;
+}) {
+  const res = await Network.request({
+    url: '/api/vote-auth/verify',
+    method: 'POST',
+    data: body,
+  });
+  console.log('[API] POST /api/vote-auth/verify ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
+/** 提交投票 */
+export async function submitVote(body: {
+  openid: string;
+  candidateIds: string[];
+  idempotencyToken: string;
+}) {
+  const res = await Network.request({
+    url: '/api/votes',
+    method: 'POST',
+    data: body,
+  });
+  console.log('[API] POST /api/votes ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
+/** 我的投票记录 */
+export async function fetchMyVote(openid: string) {
+  const res = await Network.request({
+    url: '/api/votes/mine',
+    method: 'GET',
+    data: { openid },
+  });
+  console.log('[API] GET /api/votes/mine ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
+/** 结果排名 */
+export async function fetchResults() {
+  const res = await Network.request({ url: '/api/results' });
+  console.log('[API] GET /api/results ->', res.data);
+  return res.data as ApiResponse<any>;
+}

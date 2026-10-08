@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Put, Body, HttpCode, UseGuards } from '@nestjs/common';
 import { ConfigService } from './config.service';
+import { AuthGuard, WritePermissionGuard } from '@/common/auth.guard';
 
 @Controller('config')
 export class ConfigController {
@@ -9,6 +10,15 @@ export class ConfigController {
   @Get()
   async get() {
     const data = await this.configService.get();
+    return { status: 'success', data };
+  }
+
+  /** PUT /api/config —— 保存规则配置（立即生效） */
+  @Put()
+  @HttpCode(200)
+  @UseGuards(AuthGuard, WritePermissionGuard)
+  async update(@Body() body: Record<string, any>) {
+    const data = await this.configService.update(body);
     return { status: 'success', data };
   }
 }

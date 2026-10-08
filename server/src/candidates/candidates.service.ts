@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 /** 候选人数据结构（与数据库列名保持一致，snake_case） */
@@ -80,5 +80,92 @@ export class CandidatesService {
     const rows = data as { department: string }[];
     const unique = Array.from(new Set(rows.map((r) => r.department)));
     return unique;
+  }
+
+  /** 新增候选人 */
+  async create(body: any) {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('candidates')
+      .insert({
+        code: body.code,
+        name: body.name,
+        department: body.department,
+        position: body.position || null,
+        avatar_url: body.avatar_url || null,
+        intro: body.intro || null,
+        sort_weight: body.sort_weight || 0,
+        status: body.status || 'active',
+      })
+      .select()
+      .single();
+    if (error) {
+      if (error.code === '23505') throw new BadRequestException('候选人编号已存在');
+      throw new BadRequestException(`新增失败: ${error.message}`);
+    }
+    return data;
+  }
+
+  /** 编辑候选人 */
+  async update(id: string, body: any) {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('candidates')
+      .update({
+        code: body.code,
+        name: body.name,
+        department: body.department,
+        position: body.position || null,
+        avatar_url: body.avatar_url || null,
+        intro: body.intro || null,
+        sort_weight: body.sort_weight || 0,
+        status: body.status || 'active',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) {
+      if (error.code === '23505') throw new BadRequestException('候选人编号已存在');
+      throw new BadRequestException(`编辑失败: ${error.message}`);
+    }
+    return data;
+  }
+
+  /** 删除候选人 */
+  async remove(id: string) {
+    const client = getSupabaseClient();
+    const { error } = await client.from('candidates').delete().eq('id', id);
+    if (error) throw new BadRequestException(`删除失败: ${error.message}`);
+    return { deleted: true };
+  }
+
+  /** 批量操作：enable / disable / delete */
+  async batchAction(ids: string[], action: string) {
+    const client = getSupabaseClient();
+    if (action === 'delete') {
+      const { error } = await client.from('candidates').delete().in('id', ids);
+      if (error) throw new BadRequestException(`批量删除失败: ${error.message}`);
+      return { deleted: ids.length };
+    }
+    const status = action === 'enable' ? 'active' : 'disabled';
+    const { error } = await client
+      .from('candidates')
+      .update({ status, updated_at: new Date().toISOString() })
+      .in('id', ids);
+    if (error) throw new BadRequestException(`批量操作失败: ${error.message}`);
+    return { updated: ids.length };
+  }
+
+  /** 批量调整排序权重 */
+  async batchSort(items: { id: string; sortWeight: number }[]) {
+    const client = getSupabaseClient();
+    for (const item of items) {
+      await client
+        .from('candidates')
+        .update({ sort_weight: item.sortWeight, updated_at: new Date().toISOString() })
+        .eq('id', item.id);
+    }
+    return { updated: items.length };
   }
 }

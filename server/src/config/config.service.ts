@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 /** 投票规则配置 */
@@ -42,5 +42,53 @@ export class ConfigService {
 
     if (error) throw new Error(`配置查询失败: ${error.message}`);
     return (data as VoteConfig) || null;
+  }
+
+  /** 保存投票规则配置（立即生效，保存前完整性校验） */
+  async update(body: any) {
+    if (body.min_picks != null && body.max_picks != null && body.min_picks > body.max_picks) {
+      throw new BadRequestException('最少可选人数不能大于最多可选人数');
+    }
+    if (body.max_picks != null && body.max_picks > (body.candidate_pool_size || 90)) {
+      throw new BadRequestException('最多可选人数不能超过候选人总数');
+    }
+    if (body.start_time && body.end_time && new Date(body.start_time) >= new Date(body.end_time)) {
+      throw new BadRequestException('结束时间必须晚于开始时间');
+    }
+
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('vote_config')
+      .update({
+        activity_name: body.activity_name,
+        main_title: body.main_title,
+        subtitle: body.subtitle,
+        organizer: body.organizer,
+        description: body.description,
+        start_time: body.start_time,
+        end_time: body.end_time,
+        min_picks: body.min_picks,
+        max_picks: body.max_picks,
+        candidate_pool_size: body.candidate_pool_size,
+        winner_count: body.winner_count,
+        allow_duplicate: body.allow_duplicate,
+        allow_modify: body.allow_modify,
+        anonymous: body.anonymous,
+        realtime_public: body.realtime_public,
+        result_publish_time: body.result_publish_time,
+        candidate_sort: body.candidate_sort,
+        page_size: body.page_size,
+        enable_department_filter: body.enable_department_filter,
+        device_vote_limit: body.device_vote_limit,
+        ip_vote_limit: body.ip_vote_limit,
+        tie_strategy: body.tie_strategy,
+        status: body.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', 1)
+      .select()
+      .single();
+    if (error) throw new BadRequestException(`配置保存失败: ${error.message}`);
+    return data;
   }
 }

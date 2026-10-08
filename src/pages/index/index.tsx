@@ -54,6 +54,10 @@ const IndexPage = () => {
   const countdownLabel = phase === 'not_started' ? '距开始' : '距结束';
 
   const goVote = () => {
+    if (phase === 'ended') {
+      Taro.navigateTo({ url: '/pages/vote/result/index' });
+      return;
+    }
     Taro.navigateTo({ url: '/pages/vote/candidates/index' });
   };
 
@@ -132,6 +136,16 @@ const IndexPage = () => {
         >
           {phase === 'not_started' ? '活动未开始' : phase === 'ended' ? '查看结果' : '进入投票'}
         </Button>
+
+        {/* 管理端入口（低调展示，需登录后方可进入） */}
+        <View className="text-center mt-4">
+          <Text
+            className="block text-xs text-gray-400"
+            onClick={() => Taro.navigateTo({ url: '/pages/admin/login/index' })}
+          >
+            管理端
+          </Text>
+        </View>
       </View>
     </View>
   );

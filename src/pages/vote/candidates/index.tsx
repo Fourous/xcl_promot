@@ -9,9 +9,17 @@ import {
   fetchCandidates,
   fetchConfig,
   fetchDepartments,
+  fetchMyVote,
+  submitVote,
   Candidate,
   VoteConfig,
 } from '@/services/vote';
+import {
+  getSelectedIds,
+  toggleSelect as toggleSelectUtil,
+  clearSelection,
+} from '@/utils/selection';
+import { ensureLogin } from '@/utils/session';
 
 const PAGE_SIZE = 20;
 
@@ -19,13 +27,14 @@ const CandidatesPage = () => {
   const [config, setConfig] = useState<VoteConfig | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
-  // 有序保存已选候选人 id，索引 + 1 即选中序号
+  // 已选候选人 id（与详情页共享 storage 状态）
   const [selected, setSelected] = useState<string[]>([]);
   const [keyword, setKeyword] = useState('');
   const [department, setDepartment] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const maxPicks = config?.max_picks ?? 9;
   const minPicks = config?.min_picks ?? 1;
@@ -61,6 +70,22 @@ const CandidatesPage = () => {
   };
 
   useLoad(async () => {
+    // 恢复已选状态
+    setSelected(getSelectedIds());
+
+    // 已投票用户直接进入「我的投票」状态页
+    try {
+      const openid = await ensureLogin();
+      const myRes = await fetchMyVote(openid);
+      if (myRes.data?.hasVoted) {
+        Taro.redirectTo({ url: '/pages/vote/mine/index' });
+        return;
+      }
+    } catch (e) {
+      console.error('检查投票状态失败', e);
+    }
+
+    // 加载配置与部门
     try {
       const cfg = await fetchConfig();
       setConfig(cfg);
@@ -80,16 +105,12 @@ const CandidatesPage = () => {
 
   /** 切换勾选 */
   const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((x) => x !== id);
-      }
-      if (prev.length >= maxPicks) {
-        Taro.showToast({ title: `最多选择 ${maxPicks} 人`, icon: 'none' });
-        return prev;
-      }
-      return [...prev, id];
-    });
+    const { ids, full } = toggleSelectUtil(id, maxPicks);
+    if (full) {
+      Taro.showToast({ title: `最多选择 ${maxPicks} 人`, icon: 'none' });
+      return;
+    }
+    setSelected(ids);
   };
 
   /** 搜索 */
@@ -103,17 +124,28 @@ const CandidatesPage = () => {
     loadCandidates(1, false, keyword, dept);
   };
 
-  /** 提交（第一版仅校验 + 友好提示，投票提交在后续阶段） */
-  const submit = () => {
-    if (selected.length < minPicks) {
-      Taro.showToast({ title: `请至少选择 ${minPicks} 人`, icon: 'none' });
-      return;
+  /** 提交投票：二次确认 + 幂等提交 + 成功跳转 */
+  const submit = async () => {
+    if (selected.length < minPicks || selected.length > maxPicks) return;
+    const confirm = await Taro.showModal({
+      title: '确认提交投票',
+      content: `确认提交投票？提交后不可修改。当前已选 ${selected.length} 人。`,
+    });
+    if (!confirm.confirm) return;
+
+    setSubmitting(true);
+    try {
+      const openid = await ensureLogin();
+      const idempotencyToken = `vote_${openid}_${Date.now()}`;
+      await submitVote({ openid, candidateIds: selected, idempotencyToken });
+      clearSelection();
+      setSelected([]);
+      Taro.redirectTo({ url: '/pages/vote/success/index' });
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '提交失败，请重试', icon: 'none' });
+    } finally {
+      setSubmitting(false);
     }
-    if (selected.length > maxPicks) {
-      Taro.showToast({ title: `最多选择 ${maxPicks} 人`, icon: 'none' });
-      return;
-    }
-    Taro.showToast({ title: '投票提交功能将在下一阶段开放', icon: 'none' });
   };
 
   return (
@@ -207,13 +239,16 @@ const CandidatesPage = () => {
             <Text className="text-primary font-bold tabular-nums">{selected.length}</Text>
             {' '}/ 最多 {maxPicks} 人
           </Text>
+          {selected.length < minPicks ? (
+            <Text className="block text-xs text-gray-400 mt-1">至少选择 {minPicks} 人</Text>
+          ) : null}
         </View>
         <Button
           className="bg-primary text-white rounded-md"
-          disabled={selected.length < minPicks || selected.length > maxPicks}
+          disabled={selected.length < minPicks || selected.length > maxPicks || submitting}
           onClick={submit}
         >
-          提交投票
+          {submitting ? '提交中…' : '提交投票'}
         </Button>
       </View>
     </View>

@@ -1,7 +1,7 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac } from 'crypto';
 
-// 管理端令牌签名密钥：优先从环境变量读取，否则随机生成（重启后旧 token 失效，需重新登录）
-const SECRET = process.env.COZE_ADMIN_SECRET || randomBytes(32).toString('hex');
+// 管理端令牌签名密钥：优先从环境变量读取，否则使用固定默认值（保证重启后旧 token 仍有效）
+const SECRET = process.env.COZE_ADMIN_SECRET || 'coze-admin-secret-2026-fixed-default';
 const TOKEN_TTL = 2 * 60 * 60 * 1000; // 2 小时有效期
 
 export interface AdminTokenPayload {
@@ -43,8 +43,8 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
   }
 }
 
-// 投票人令牌签名密钥与有效期（7 天）
-const VOTER_SECRET = process.env.COZE_VOTER_SECRET || randomBytes(32).toString('hex');
+// 投票人令牌签名密钥与有效期（7 天）：优先从环境变量读取，否则使用固定默认值
+const VOTER_SECRET = process.env.COZE_VOTER_SECRET || 'coze-voter-secret-2026-fixed-default';
 const VOTER_TOKEN_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export interface VoterTokenPayload {

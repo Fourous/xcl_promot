@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
-import Taro, { useLoad, useReachBottom } from '@tarojs/taro';
+import Taro, { useReachBottom } from '@tarojs/taro';
 import { fetchCandidatePool, CandidatePoolItem } from '@/services/vote';
 import { adminPoolToggle } from '@/services/admin';
 import { getToken } from '@/utils/auth';
@@ -8,49 +8,51 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-/** 候选人管理：展示用户池所有用户，标记启用状态，支持批量启用/停用 */
+type CandidateStatus = 'active' | 'disabled' | 'none';
+
+/** 候选人管理：搜索用户池，标记该活动候选人的启用/停用状态，支持批量管理 */
 export default function AdminCandidates() {
   const [list, setList] = useState<CandidatePoolItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedNos, setSelectedNos] = useState<string[]>([]);
 
   const load = async (p = 1, append = false, kw = keyword) => {
+    const trimmed = (kw || '').trim();
+    // 空关键词不查询，避免默认进入页面 / 空搜索时全表查询
+    if (!trimmed) {
+      setList([]);
+      setTotal(0);
+      setSearched(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetchCandidatePool({ page: p, pageSize: 20, keyword: kw || undefined });
+      const res = await fetchCandidatePool({ page: p, pageSize: 20, keyword: trimmed });
       setList(append ? [...list, ...res.list] : res.list);
       setTotal(res.total);
       setPage(p);
+      setSearched(true);
     } catch (e) {
-      console.error('加载用户池失败', e);
+      console.error('加载用户失败', e);
       Taro.showToast({ title: '加载失败', icon: 'none' });
+    } finally {
+      setLoading(false);
     }
   };
 
-  useLoad(() => {
-    load(1);
-  });
-
   useReachBottom(() => {
-    if (list.length < total) load(page + 1, true);
+    if (loading || list.length >= total) return;
+    load(page + 1, true, keyword);
   });
 
   const toggleSelect = (no: string) => {
     setSelectedNos((prev) => (prev.includes(no) ? prev.filter((x) => x !== no) : [...prev, no]));
-  };
-
-  const enterBatchMode = () => {
-    setBatchMode(true);
-    setSelectedNos([]);
-  };
-
-  const exitBatchMode = () => {
-    setBatchMode(false);
-    setSelectedNos([]);
   };
 
   const batchAction = async (action: 'enable' | 'disable') => {
@@ -61,17 +63,16 @@ export default function AdminCandidates() {
     try {
       await adminPoolToggle(getToken(), selectedNos, action);
       Taro.showToast({ title: action === 'enable' ? '已批量启用' : '已批量停用', icon: 'success' });
-      exitBatchMode();
+      setBatchMode(false);
+      setSelectedNos([]);
       load(1, false, keyword);
     } catch (e: any) {
       Taro.showToast({ title: e?.message || '操作失败', icon: 'none' });
     }
   };
 
-  /** 单条启用/停用切换 */
   const toggleSingle = async (item: CandidatePoolItem) => {
-    const isActive = item.isCandidate && item.candidateStatus === 'active';
-    const action: 'enable' | 'disable' = isActive ? 'disable' : 'enable';
+    const action: 'enable' | 'disable' = item.candidateStatus === 'active' ? 'disable' : 'enable';
     try {
       await adminPoolToggle(getToken(), [item.employee_no], action);
       Taro.showToast({ title: action === 'enable' ? '已启用' : '已停用', icon: 'success' });
@@ -81,9 +82,9 @@ export default function AdminCandidates() {
     }
   };
 
-  const statusOf = (item: CandidatePoolItem) => {
-    if (item.isCandidate && item.candidateStatus === 'active') return 'active';
-    if (item.isCandidate && item.candidateStatus === 'disabled') return 'disabled';
+  const statusOf = (item: CandidatePoolItem): CandidateStatus => {
+    if (item.candidateStatus === 'active') return 'active';
+    if (item.candidateStatus === 'disabled') return 'disabled';
     return 'none';
   };
 
@@ -97,6 +98,7 @@ export default function AdminCandidates() {
             placeholder="搜索工号/姓名"
             value={keyword}
             onInput={(e) => setKeyword(e.detail.value)}
+            onConfirm={() => load(1, false, keyword)}
           />
         </View>
         <Button size="sm" onClick={() => load(1, false, keyword)}>搜索</Button>
@@ -109,7 +111,7 @@ export default function AdminCandidates() {
         </Button>
       </View>
 
-      {/* 筛选 + 批量开关 */}
+      {/* 图例 + 批量开关 */}
       <View className="px-4 py-3 flex flex-row items-center gap-2 flex-wrap">
         <Badge variant="default">已启用</Badge>
         <Badge variant="secondary">已停用</Badge>
@@ -118,13 +120,27 @@ export default function AdminCandidates() {
         <Button
           size="sm"
           variant={batchMode ? 'default' : 'outline'}
-          onClick={batchMode ? exitBatchMode : enterBatchMode}
+          onClick={() => {
+            setBatchMode(!batchMode);
+            setSelectedNos([]);
+          }}
         >
           {batchMode ? '取消批量' : '批量管理'}
         </Button>
       </View>
 
-      <Text className="block text-xs text-gray-500 px-4 mb-2">共 {total} 名用户</Text>
+      {/* 空状态提示（默认不查询） */}
+      {!searched ? (
+        <View className="bg-white rounded-lg mx-4 p-8">
+          <Text className="block text-sm text-gray-500 text-center">
+            输入工号或姓名搜索，查看该活动候选人的启用状态
+          </Text>
+        </View>
+      ) : null}
+
+      {searched && list.length > 0 ? (
+        <Text className="block text-xs text-gray-500 px-4 mb-2">共 {total} 名用户</Text>
+      ) : null}
 
       {/* 用户列表 */}
       {list.map((item) => {
@@ -142,30 +158,18 @@ export default function AdminCandidates() {
                 onCheckedChange={() => toggleSelect(item.employee_no)}
               />
             ) : null}
-            <Avatar className="w-11 h-11 mr-3">
-              <AvatarFallback>{item.name?.charAt(0)}</AvatarFallback>
-            </Avatar>
             <View className="flex-1">
               <View className="flex flex-row items-center gap-2">
                 <Text className="block text-base font-bold text-gray-900">{item.name}</Text>
                 <Text className="block text-xs text-gray-400 tabular-nums">{item.employee_no}</Text>
               </View>
-              <Text className="block text-xs text-gray-500 mt-1">
-                {item.department || '-'} · {item.position || '-'}
-              </Text>
+              <Text className="block text-xs text-gray-500 mt-1">{item.department || '-'}</Text>
             </View>
-            <Badge
-              variant={st === 'active' ? 'default' : st === 'disabled' ? 'secondary' : 'outline'}
-            >
+            <Badge variant={st === 'active' ? 'default' : st === 'disabled' ? 'secondary' : 'outline'}>
               {st === 'active' ? '已启用' : st === 'disabled' ? '已停用' : '未启用'}
             </Badge>
             {!batchMode ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-3"
-                onClick={() => toggleSingle(item)}
-              >
+              <Button size="sm" variant="outline" className="ml-3" onClick={() => toggleSingle(item)}>
                 {st === 'active' ? '停用' : '启用'}
               </Button>
             ) : null}
@@ -173,9 +177,13 @@ export default function AdminCandidates() {
         );
       })}
 
-      {list.length === 0 ? (
+      {loading ? (
+        <Text className="block text-sm text-gray-500 text-center py-4">加载中…</Text>
+      ) : null}
+
+      {searched && !loading && list.length === 0 ? (
         <View className="bg-white rounded-lg mx-4 p-8">
-          <Text className="block text-sm text-gray-500 text-center">暂无用户</Text>
+          <Text className="block text-sm text-gray-500 text-center">未找到匹配用户</Text>
         </View>
       ) : null}
 

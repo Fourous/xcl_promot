@@ -50,7 +50,7 @@ export class CandidatesService {
     }
     if (query.keyword) {
       const kw = query.keyword;
-      builder = builder.or(`name.ilike.*${kw}*,code.ilike.*${kw}*`);
+      builder = builder.or(`name.ilike.*${kw}*,code.ilike.*${kw}*,employee_no.ilike.*${kw}*`);
     }
 
     const from = (page - 1) * pageSize;

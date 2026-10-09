@@ -47,15 +47,14 @@ export class ActivitiesService {
     for (const a of all || []) {
       let hasVoteRight = false;
       if (employeeNo) {
-        // 候选人即拥有投票权（候选人从用户池选择，以工号关联）
-        const { data: cand } = await client
-          .from('candidates')
+        // 投票权以「投票名单 voters」为准：名单内即拥有该活动投票权（与是否参选/是否已投解耦）
+        const { data: voter } = await client
+          .from('voters')
           .select('id')
           .eq('activity_id', a.id)
           .eq('employee_no', employeeNo)
-          .eq('status', 'active')
           .maybeSingle();
-        hasVoteRight = !!cand;
+        hasVoteRight = !!voter;
       }
       result.push({ ...a, hasVoteRight });
     }

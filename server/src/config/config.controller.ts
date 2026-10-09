@@ -18,7 +18,8 @@ export class ConfigController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   async update(@Body() body: Record<string, any>, @Query('activityId') activityId?: string) {
-    const data = await this.configService.update(Number(activityId) || 1, body);
+    const aid = Number(body?.activityId) || Number(activityId) || 1;
+    const data = await this.configService.update(aid, body);
     return { status: 'success', data };
   }
 }

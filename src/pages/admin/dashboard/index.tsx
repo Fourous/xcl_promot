@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
-import Taro, { useLoad } from '@tarojs/taro';
+import Taro, { useDidShow } from '@tarojs/taro';
 import { fetchDashboard, fetchActivities, adminCreateActivity } from '@/services/admin';
 import { getToken, getAdminInfo } from '@/utils/auth';
 import { getActivityId, setActivityId } from '@/utils/activity';
@@ -91,7 +91,7 @@ export default function Dashboard() {
     }
   };
 
-  useLoad(() => {
+  useDidShow(() => {
     loadActivities();
     load();
   });

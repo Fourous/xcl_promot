@@ -150,6 +150,21 @@ export async function adminBatchCandidates(token: string, ids: string[], action:
   return res.data as ApiResponse<any>;
 }
 
+/** 按工号批量启用/停用候选人 */
+export async function adminPoolToggle(
+  token: string,
+  employeeNos: string[],
+  action: 'enable' | 'disable',
+) {
+  const res = await Network.request({
+    url: '/api/candidates/pool-toggle',
+    method: 'POST',
+    header: authHeader(token),
+    data: { employeeNos, action, activityId: getActivityId() },
+  });
+  return res.data as ApiResponse<any>;
+}
+
 /** 保存规则配置 */
 export async function adminSaveConfig(token: string, body: Record<string, any>) {
   const res = await Network.request({

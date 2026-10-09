@@ -206,4 +206,112 @@ export class CandidatesService {
     }
     return { updated: items.length };
   }
+
+  /** 用户池 + 候选人启用状态（候选人管理页：展示所有用户，标记已启用/未启用） */
+  async pool(query: CandidateListQuery) {
+    const client = getSupabaseClient();
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+    const activityId = Number(query.activityId) || 1;
+
+    // 该活动已有候选人的 employee_no -> 状态映射
+    const { data: cands } = await client
+      .from('candidates')
+      .select('id, employee_no, status, code')
+      .eq('activity_id', activityId);
+    const candMap = new Map<string, any>();
+    for (const c of cands || []) {
+      if (c.employee_no) candMap.set(c.employee_no, c);
+    }
+
+    // 用户池分页 + 搜索
+    let builder = client
+      .from('voter_accounts')
+      .select('employee_no, name, department, position, intro, status', { count: 'exact' });
+    if (query.keyword) {
+      const kw = query.keyword;
+      builder = builder.or(`employee_no.ilike.*${kw}*,name.ilike.*${kw}*`);
+    }
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const { data: users, error, count } = await builder
+      .order('employee_no', { ascending: true })
+      .range(from, to);
+
+    if (error) throw new BadRequestException(`用户池查询失败: ${error.message}`);
+
+    const list = (users || []).map((u: any) => {
+      const cand = candMap.get(u.employee_no);
+      return {
+        ...u,
+        isCandidate: !!cand,
+        candidateId: cand?.id || null,
+        candidateStatus: cand?.status || null,
+        candidateCode: cand?.code || null,
+      };
+    });
+
+    return { list, total: count || 0, page, pageSize };
+  }
+
+  /** 批量启用候选人（按工号从用户池批量加入当前活动） */
+  async batchEnable(employeeNos: string[], activityId = 1) {
+    const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
+    let enabled = 0;
+    for (const emp of employeeNos || []) {
+      const { data: user } = await client
+        .from('voter_accounts')
+        .select('*')
+        .eq('employee_no', emp)
+        .maybeSingle();
+      if (!user) continue;
+
+      const { data: existing } = await client
+        .from('candidates')
+        .select('id, status')
+        .eq('activity_id', aid)
+        .eq('employee_no', emp)
+        .maybeSingle();
+      if (existing) {
+        if (existing.status !== 'active') {
+          await client
+            .from('candidates')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+          enabled++;
+        }
+        continue;
+      }
+
+      const { error } = await client
+        .from('candidates')
+        .insert({
+          activity_id: aid,
+          code: emp,
+          employee_no: emp,
+          name: user.name,
+          department: user.department,
+          position: user.position || null,
+          intro: user.intro || null,
+          sort_weight: 0,
+          status: 'active',
+        });
+      if (!error) enabled++;
+    }
+    return { enabled };
+  }
+
+  /** 批量停用候选人（按工号，仅停用不删除） */
+  async batchDisable(employeeNos: string[], activityId = 1) {
+    const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
+    const { error } = await client
+      .from('candidates')
+      .update({ status: 'disabled', updated_at: new Date().toISOString() })
+      .in('employee_no', employeeNos || [])
+      .eq('activity_id', aid);
+    if (error) throw new BadRequestException(`批量停用失败: ${error.message}`);
+    return { disabled: (employeeNos || []).length };
+  }
 }

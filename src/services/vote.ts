@@ -62,6 +62,28 @@ export interface CandidatePage {
   pageSize: number;
 }
 
+/** 用户池条目 + 候选人启用状态 */
+export interface CandidatePoolItem {
+  employee_no: string;
+  name: string;
+  department: string;
+  position: string | null;
+  intro: string | null;
+  status: string;
+  isCandidate: boolean;
+  candidateId: string | null;
+  candidateStatus: string | null;
+  candidateCode: string | null;
+}
+
+/** 用户池分页结果 */
+export interface CandidatePoolPage {
+  list: CandidatePoolItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 /** 获取活动列表（公开） */
 export async function fetchActivities(): Promise<VoteConfig[]> {
   const res = await Network.request({ url: '/api/activities' });
@@ -93,6 +115,22 @@ export async function fetchCandidates(params: {
   });
   console.log('[API] GET /api/candidates ->', res.data);
   return (res.data as ApiResponse<CandidatePage>).data;
+}
+
+/** 获取用户池 + 候选人启用状态（候选人管理页） */
+export async function fetchCandidatePool(params: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  activityId?: number;
+}): Promise<CandidatePoolPage> {
+  const res = await Network.request({
+    url: '/api/candidates/pool',
+    method: 'GET',
+    data: { ...params, activityId: params.activityId ?? getActivityId() },
+  });
+  console.log('[API] GET /api/candidates/pool ->', res.data);
+  return (res.data as ApiResponse<CandidatePoolPage>).data;
 }
 
 /** 获取部门列表 */

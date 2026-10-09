@@ -45,6 +45,36 @@ export class CandidatesController {
     return { status: 'success', data };
   }
 
+  /** GET /api/candidates/pool —— 用户池 + 候选人启用状态 */
+  @Get('pool')
+  async pool(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('keyword') keyword?: string,
+    @Query('activityId') activityId?: string,
+  ) {
+    const data = await this.candidatesService.pool({
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 20,
+      keyword,
+      activityId: Number(activityId) || 1,
+    });
+    return { status: 'success', data };
+  }
+
+  /** POST /api/candidates/pool-toggle —— 按工号批量启用/停用候选人 */
+  @Post('pool-toggle')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, WritePermissionGuard)
+  async poolToggle(@Body() body: Record<string, any>) {
+    const action = body.action === 'enable' ? 'enable' : 'disable';
+    const data =
+      action === 'enable'
+        ? await this.candidatesService.batchEnable(body.employeeNos, body.activityId)
+        : await this.candidatesService.batchDisable(body.employeeNos, body.activityId);
+    return { status: 'success', data };
+  }
+
   /** POST /api/candidates —— 新增候选人 */
   @Post()
   @HttpCode(200)

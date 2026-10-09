@@ -10,11 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import StatePage from '@/components/business/state-page';
-import { Users, FileSpreadsheet, Settings, List, Trophy, ShieldCheck, Plus } from 'lucide-react-taro';
+import { Users, Settings, List, Trophy, ShieldCheck, Plus } from 'lucide-react-taro';
 
 const NAV_ITEMS = [
   { key: 'candidates', label: '候选人管理', icon: Users, url: '/pages/admin/candidates/index' },
-  { key: 'import', label: 'Excel 导入', icon: FileSpreadsheet, url: '/pages/admin/import/index' },
   { key: 'config', label: '规则配置', icon: Settings, url: '/pages/admin/config/index' },
   { key: 'records', label: '投票记录', icon: List, url: '/pages/admin/records/index' },
   { key: 'result', label: '结果统计', icon: Trophy, url: '/pages/admin/result/index' },
@@ -58,7 +57,7 @@ export default function Dashboard() {
   const loadActivities = async () => {
     try {
       const res = await fetchActivities();
-      setActivities(res.data || []);
+      setActivities((res.data || []).filter((a: any) => a.status !== 'archived'));
     } catch (e) {
       console.error('加载活动列表失败', e);
     }

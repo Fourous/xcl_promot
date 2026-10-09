@@ -9,10 +9,13 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { AuthGuard, WritePermissionGuard } from '@/common/auth.guard';
+import { Request, Response } from 'express';
 
 /** 用户池管理接口（管理端） */
 @Controller('users')
@@ -28,6 +31,24 @@ export class UsersController {
     @Query('pageSize') pageSize?: string,
   ) {
     const data = await this.usersService.list(keyword, Number(page) || 1, Number(pageSize) || 20);
+    return { status: 'success', data };
+  }
+
+  /** GET /api/users/template —— 下载用户导入模板 */
+  @Get('template')
+  @UseGuards(AuthGuard)
+  async template(@Res() res: Response) {
+    const buffer = await this.usersService.template();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''user_import_template.xlsx");
+    res.send(buffer);
+  }
+
+  /** GET /api/users/import-batches —— 用户导入历史记录 */
+  @Get('import-batches')
+  @UseGuards(AuthGuard)
+  async importBatches() {
+    const data = await this.usersService.importBatches();
     return { status: 'success', data };
   }
 
@@ -63,9 +84,14 @@ export class UsersController {
   @HttpCode(200)
   @UseGuards(AuthGuard, WritePermissionGuard)
   @UseInterceptors(FileInterceptor('file'))
-  async importUsers(@UploadedFile() file: Express.Multer.File) {
+  async importUsers(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
     if (!file) throw new BadRequestException('未接收到文件');
-    const data = await this.usersService.importUsers(file);
+    const admin = (req as any).admin;
+    const data = await this.usersService.importUsers(
+      file,
+      admin?.account || 'unknown',
+      file.originalname || '用户导入.xlsx',
+    );
     return { status: 'success', data };
   }
 }

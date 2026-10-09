@@ -12,7 +12,6 @@ export default defineAppConfig({
     'pages/admin/dashboard/index',
     'pages/admin/candidates/index',
     'pages/admin/candidates-edit/index',
-    'pages/admin/import/index',
     'pages/admin/config/index',
     'pages/admin/records/index',
     'pages/admin/result/index',

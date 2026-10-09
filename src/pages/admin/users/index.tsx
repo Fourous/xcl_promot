@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useReachBottom } from '@tarojs/taro';
-import { fetchUsers, resetUserPassword, adminImportUsers, createUser } from '@/services/admin';
+import { fetchUsers, resetUserPassword, adminImportUsers, createUser, adminUserImportBatches, adminDownloadUserTemplate } from '@/services/admin';
 import { getToken } from '@/utils/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Upload, UserPlus } from 'lucide-react-taro';
+import { Upload, UserPlus, Download } from 'lucide-react-taro';
 
 interface UserItem {
   id: string;
@@ -37,6 +37,7 @@ export default function AdminUsers() {
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [batches, setBatches] = useState<any[]>([]);
 
   const load = async (p = 1, append = false, kw = keyword) => {
     try {
@@ -51,8 +52,18 @@ export default function AdminUsers() {
     }
   };
 
+  const loadBatches = async () => {
+    try {
+      const res = await adminUserImportBatches(getToken());
+      setBatches(res.data || []);
+    } catch (e) {
+      console.error('加载导入记录失败', e);
+    }
+  };
+
   useLoad(() => {
     load(1);
+    loadBatches();
   });
 
   useReachBottom(() => {
@@ -101,6 +112,15 @@ export default function AdminUsers() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      await adminDownloadUserTemplate(getToken());
+      Taro.showToast({ title: '模板已下载', icon: 'success' });
+    } catch (e) {
+      Taro.showToast({ title: '下载失败', icon: 'none' });
+    }
+  };
+
   const handleImport = async () => {
     const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP;
     if (!isWeapp) {
@@ -121,6 +141,7 @@ export default function AdminUsers() {
         showCancel: false,
       });
       load(1, false, keyword);
+      loadBatches();
     } catch (e) {
       console.error('导入失败', e);
       Taro.hideLoading();
@@ -153,6 +174,10 @@ export default function AdminUsers() {
           >
             <Upload size={16} color="#C80018" className="mr-1" />
             <Text>{importing ? '导入中...' : '导入用户'}</Text>
+          </Button>
+          <Button variant="outline" onClick={handleDownloadTemplate}>
+            <Download size={16} color="#C80018" className="mr-1" />
+            <Text>模板</Text>
           </Button>
         </View>
 
@@ -198,6 +223,27 @@ export default function AdminUsers() {
         {list.length === 0 ? (
           <Text className="block text-sm text-gray-400 text-center py-10">暂无用户</Text>
         ) : null}
+      </View>
+
+      <View className="px-4 mt-6">
+        <Text className="block text-sm font-bold text-gray-900 mb-3">导入记录</Text>
+        {batches.length === 0 ? (
+          <View className="bg-white rounded-lg p-6">
+            <Text className="block text-sm text-gray-400 text-center">暂无导入记录</Text>
+          </View>
+        ) : (
+          batches.map((b: any) => (
+            <View key={b.id} className="bg-white rounded-lg p-4 mb-2">
+              <View className="flex flex-row items-center justify-between">
+                <Text className="block text-sm font-semibold text-foreground">{b.file_name}</Text>
+                <Text className="text-xs text-gray-500">成功 {b.success_rows} / 失败 {b.fail_rows}</Text>
+              </View>
+              <Text className="block text-xs text-gray-400 mt-1">
+                {new Date(b.created_at).toLocaleString()} · 操作人 {b.operator || '-'}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

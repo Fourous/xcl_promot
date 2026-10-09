@@ -88,8 +88,21 @@ export class UsersService {
     return data;
   }
 
+  /** 生成用户导入模板（工号 | 姓名 | 部门 | 岗位 | 简介） */
+  async template(): Promise<Buffer> {
+    const header = ['工号', '姓名', '部门', '岗位', '简介'];
+    const examples = [
+      ['20250001', '张三', '综合办公室', '主管', '示例：长期从事综合管理工作'],
+      ['20250002', '李四', '技术研发部', '工程师', '示例：深耕技术领域'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([header, ...examples]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '用户导入模板');
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
+
   /** Excel 导入用户到用户池（工号唯一，默认密码=工号，登录后强制改密） */
-  async importUsers(file: Express.Multer.File) {
+  async importUsers(file: Express.Multer.File, operator = 'unknown', fileName?: string) {
     const buffer = file.buffer || (file.path ? await readFile(file.path) : null);
     if (!buffer) throw new BadRequestException('无法读取文件内容');
 
@@ -104,6 +117,7 @@ export class UsersService {
     let imported = 0;
     let skipped = 0;
     const errors: any[] = [];
+    const duplicates: any[] = [];
     const seen = new Set<string>();
 
     for (let i = 0; i < dataRows.length; i++) {
@@ -132,6 +146,7 @@ export class UsersService {
         .maybeSingle();
       if (existing) {
         skipped += 1;
+        duplicates.push({ line, employeeNo, name, reason: '工号已存在，已跳过' });
         continue;
       }
 
@@ -151,6 +166,28 @@ export class UsersService {
       imported += 1;
     }
 
-    return { imported, skipped, total: dataRows.length, errors };
+    // 记录导入批次
+    await client.from('import_batches').insert({
+      file_name: fileName || '用户导入.xlsx',
+      total_rows: dataRows.length,
+      success_rows: imported,
+      fail_rows: errors.length + duplicates.length,
+      error_detail: [...errors, ...duplicates],
+      operator,
+    });
+
+    return { imported, skipped, total: dataRows.length, errors, duplicates };
+  }
+
+  /** 用户导入历史批次 */
+  async importBatches() {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('import_batches')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw new BadRequestException(`查询失败: ${error.message}`);
+    return data || [];
   }
 }

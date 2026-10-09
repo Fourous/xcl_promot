@@ -31,7 +31,7 @@ export interface VoteConfig {
 
 @Injectable()
 export class ConfigService {
-  /** 获取投票规则配置（按活动 id） */
+  /** 获取投票规则配置（按活动 id），候选池总数动态计算为已启用候选人数量 */
   async get(activityId = 1) {
     const client = getSupabaseClient();
     const { data, error } = await client
@@ -41,22 +41,45 @@ export class ConfigService {
       .maybeSingle();
 
     if (error) throw new Error(`配置查询失败: ${error.message}`);
-    return (data as VoteConfig) || null;
+    if (!data) return null;
+
+    // 候选池总数 = 当前活动已启用候选人数量（动态计算，不可手动修改）
+    const { count } = await client
+      .from('candidates')
+      .select('*', { count: 'exact', head: true })
+      .eq('activity_id', activityId)
+      .eq('status', 'active');
+
+    return { ...data, candidate_pool_size: count || 0 } as VoteConfig;
   }
 
   /** 保存投票规则配置（立即生效，保存前完整性校验） */
   async update(activityId: number, body: any) {
+    const client = getSupabaseClient();
+    // 候选池总数 = 当前活动已启用候选人数量（动态计算）
+    const { count: poolSize } = await client
+      .from('candidates')
+      .select('*', { count: 'exact', head: true })
+      .eq('activity_id', activityId)
+      .eq('status', 'active');
+    const pool = poolSize || 0;
+
     if (body.min_picks != null && body.max_picks != null && body.min_picks > body.max_picks) {
       throw new BadRequestException('最少可选人数不能大于最多可选人数');
     }
-    if (body.max_picks != null && body.max_picks > (body.candidate_pool_size || 90)) {
-      throw new BadRequestException('最多可选人数不能超过候选人总数');
+    if (body.min_picks != null && body.min_picks > pool) {
+      throw new BadRequestException(`最少可选人数不能超过候选池总数（当前 ${pool} 人）`);
+    }
+    if (body.max_picks != null && body.max_picks > pool) {
+      throw new BadRequestException(`最多可选人数不能超过候选池总数（当前 ${pool} 人）`);
+    }
+    if (body.winner_count != null && body.winner_count > pool) {
+      throw new BadRequestException(`最终当选名额不能超过候选池总数（当前 ${pool} 人）`);
     }
     if (body.start_time && body.end_time && new Date(body.start_time) >= new Date(body.end_time)) {
       throw new BadRequestException('结束时间必须晚于开始时间');
     }
 
-    const client = getSupabaseClient();
     const { data, error } = await client
       .from('vote_config')
       .update({
@@ -69,7 +92,6 @@ export class ConfigService {
         end_time: body.end_time,
         min_picks: body.min_picks,
         max_picks: body.max_picks,
-        candidate_pool_size: body.candidate_pool_size,
         winner_count: body.winner_count,
         allow_duplicate: body.allow_duplicate,
         allow_modify: body.allow_modify,

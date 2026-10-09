@@ -87,6 +87,31 @@ export class CandidatesService {
     return unique;
   }
 
+  /** 确保候选人在投票名单（voters）中，保证候选人具备投票权 */
+  private async ensureVoter(
+    client: any,
+    activityId: number,
+    employeeNo: string,
+    name: string,
+    department?: string | null,
+  ) {
+    if (!employeeNo) return;
+    const { data: existing } = await client
+      .from('voters')
+      .select('id')
+      .eq('activity_id', activityId)
+      .eq('employee_no', employeeNo)
+      .maybeSingle();
+    if (existing) return;
+    await client.from('voters').insert({
+      activity_id: activityId,
+      employee_no: employeeNo,
+      name,
+      department: department || null,
+      has_voted: false,
+    });
+  }
+
   /** 新增候选人（支持从用户池按工号选择，自动带出姓名/部门/岗位） */
   async create(body: any, activityId = 1) {
     const client = getSupabaseClient();
@@ -130,6 +155,9 @@ export class CandidatesService {
       if (error.code === '23505') throw new BadRequestException('候选人编号已存在');
       throw new BadRequestException(`新增失败: ${error.message}`);
     }
+    if (data.employee_no && (data.status || 'active') === 'active') {
+      await this.ensureVoter(client, aid, data.employee_no, data.name, data.department);
+    }
     return data;
   }
 
@@ -156,6 +184,9 @@ export class CandidatesService {
     if (error) {
       if (error.code === '23505') throw new BadRequestException('候选人编号已存在');
       throw new BadRequestException(`编辑失败: ${error.message}`);
+    }
+    if (data.employee_no && (data.status || 'active') === 'active') {
+      await this.ensureVoter(client, Number(activityId) || 1, data.employee_no, data.name, data.department);
     }
     return data;
   }
@@ -192,6 +223,16 @@ export class CandidatesService {
       .in('id', ids)
       .eq('activity_id', aid);
     if (error) throw new BadRequestException(`批量操作失败: ${error.message}`);
+    if (action === 'enable') {
+      const { data: cands } = await client
+        .from('candidates')
+        .select('employee_no,name,department')
+        .in('id', ids)
+        .eq('activity_id', aid);
+      for (const c of cands || []) {
+        await this.ensureVoter(client, aid, c.employee_no, c.name, c.department);
+      }
+    }
     return { updated: ids.length };
   }
 
@@ -281,6 +322,7 @@ export class CandidatesService {
             .eq('id', existing.id);
           enabled++;
         }
+        await this.ensureVoter(client, aid, emp, user.name, user.department);
         continue;
       }
 
@@ -297,7 +339,10 @@ export class CandidatesService {
           sort_weight: 0,
           status: 'active',
         });
-      if (!error) enabled++;
+      if (!error) {
+        enabled++;
+        await this.ensureVoter(client, aid, emp, user.name, user.department);
+      }
     }
     return { enabled };
   }

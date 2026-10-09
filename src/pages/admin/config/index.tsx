@@ -16,6 +16,7 @@ interface FieldDef {
   label: string;
   type: FieldType;
   placeholder?: string;
+  readonly?: boolean;
 }
 
 const SECTIONS: { title: string; fields: FieldDef[] }[] = [
@@ -42,7 +43,7 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     fields: [
       { key: 'min_picks', label: '最少可选人数', type: 'number' },
       { key: 'max_picks', label: '最多可选人数', type: 'number' },
-      { key: 'candidate_pool_size', label: '候选人池总数', type: 'number' },
+      { key: 'candidate_pool_size', label: '候选人池总数（已录入候选人数量，不可改）', type: 'number', readonly: true },
       { key: 'winner_count', label: '最终当选名额', type: 'number' },
       { key: 'allow_duplicate', label: '允许重复投给同一人', type: 'boolean' },
       { key: 'allow_modify', label: '允许修改已提交投票', type: 'boolean' },
@@ -195,6 +196,15 @@ export default function ConfigPage() {
                         </Text>
                       </View>
                     </Picker>
+                  </View>
+                </>
+              ) : f.readonly ? (
+                <>
+                  <Text className="block text-sm font-bold text-gray-700 mb-2">{f.label}</Text>
+                  <View className="bg-gray-100 rounded-lg px-4 py-3">
+                    <Text className="block text-sm text-gray-600 tabular-nums">
+                      {config[f.key] ?? 0} 人
+                    </Text>
                   </View>
                 </>
               ) : (

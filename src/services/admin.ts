@@ -346,3 +346,21 @@ export async function adminImportUsers(token: string, filePath: string) {
   console.log('[API] POST /api/users/import ->', res.data);
   return JSON.parse(res.data) as ApiResponse<any>;
 }
+
+/** 用户导入历史批次 */
+export async function adminUserImportBatches(token: string) {
+  const res = await Network.request({
+    url: '/api/users/import-batches',
+    method: 'GET',
+    header: authHeader(token),
+  });
+  return res.data as ApiResponse<any>;
+}
+
+/** 下载用户导入模板 */
+export async function adminDownloadUserTemplate(token: string) {
+  await Network.downloadFile({
+    url: '/api/users/template',
+    header: authHeader(token),
+  });
+}

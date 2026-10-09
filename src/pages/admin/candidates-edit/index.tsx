@@ -33,7 +33,31 @@ export default function CandidateEdit() {
   });
   const [userKeyword, setUserKeyword] = useState('');
   const [userResults, setUserResults] = useState<UserItem[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [userPage, setUserPage] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  /** 加载用户池（空搜索即分页展示所有用户，关键词则过滤） */
+  const loadUsers = async (p = 1, kw = '', append = false) => {
+    if (loadingUsers) return;
+    setLoadingUsers(true);
+    try {
+      const res = await fetchUsers(getToken(), {
+        keyword: kw || undefined,
+        page: p,
+        pageSize: 20,
+      });
+      const list = res.data?.list || [];
+      const total = res.data?.total || 0;
+      setUserResults((prev) => (append ? [...prev, ...list] : list));
+      setUserTotal(total);
+      setUserPage(p);
+    } catch (e) {
+      Taro.showToast({ title: '加载用户失败', icon: 'none' });
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   useLoad(async () => {
     if (id) {
@@ -50,6 +74,9 @@ export default function CandidateEdit() {
           status: c.status,
         });
       }
+    } else {
+      // 新增模式：打开即展示用户池所有用户，方便直接选择
+      loadUsers(1, '');
     }
   });
 
@@ -57,35 +84,28 @@ export default function CandidateEdit() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  /** 搜索用户池 */
-  const searchUsers = async (kw?: string) => {
-    const key = (kw ?? userKeyword).trim();
-    if (!key) {
-      Taro.showToast({ title: '请输入工号或姓名', icon: 'none' });
-      return;
-    }
-    setSearching(true);
-    try {
-      const res = await fetchUsers(getToken(), { keyword: key, page: 1, pageSize: 20 });
-      setUserResults(res.data?.list || []);
-    } catch (e) {
-      Taro.showToast({ title: '搜索失败', icon: 'none' });
-    } finally {
-      setSearching(false);
+  /** 搜索：空关键词则恢复展示全部用户 */
+  const searchUsers = () => {
+    loadUsers(1, userKeyword.trim());
+  };
+
+  /** 加载更多 */
+  const loadMore = () => {
+    if (userResults.length < userTotal) {
+      loadUsers(userPage + 1, userKeyword.trim(), true);
     }
   };
 
-  /** 从用户池选择，自动填充工号/姓名/部门/岗位 */
+  /** 从用户池选择，自动填充工号/姓名/部门/岗位（编号默认 = 工号） */
   const pickUser = (u: UserItem) => {
     setForm((prev) => ({
       ...prev,
+      code: prev.code || u.employee_no,
       employee_no: u.employee_no,
       name: u.name,
       department: u.department || '',
       position: u.position || '',
     }));
-    setUserResults([]);
-    setUserKeyword('');
   };
 
   const handleSave = async () => {
@@ -134,44 +154,67 @@ export default function CandidateEdit() {
           <CardContent className="p-4">
             <Text className="block text-sm font-bold text-gray-900 mb-2">从用户池选择</Text>
             <Text className="block text-xs text-gray-500 mb-3">
-              候选人必须来自用户池（工号账号），选中后自动带出姓名、部门、岗位。
+              候选人必须来自用户池（工号账号），默认展示全部用户，可输入工号/姓名过滤。
             </Text>
             <View className="flex items-center gap-2">
               <View className="flex-1 bg-gray-50 rounded-lg px-3 py-2">
                 <Input
                   className="w-full bg-transparent text-sm"
-                  placeholder="输入工号 / 姓名搜索"
+                  placeholder="输入工号 / 姓名过滤"
                   value={userKeyword}
                   onInput={(e) => setUserKeyword(e.detail.value)}
-                  onConfirm={() => searchUsers()}
+                  onConfirm={searchUsers}
                 />
               </View>
-              <Button size="sm" onClick={() => searchUsers()} disabled={searching}>
-                {searching ? '搜索中' : '搜索'}
+              <Button size="sm" onClick={searchUsers} disabled={loadingUsers}>
+                {loadingUsers ? '加载中' : '搜索'}
               </Button>
             </View>
 
+            <Text className="block text-xs text-gray-400 mt-3 mb-1">共 {userTotal} 名用户</Text>
+
             {userResults.length > 0 ? (
-              <View className="mt-3">
-                {userResults.map((u) => (
-                  <View
-                    key={u.id}
-                    className="border border-border rounded-lg p-3 mb-2"
-                    onClick={() => pickUser(u)}
-                  >
-                    <View className="flex flex-row items-center justify-between">
-                      <Text className="block text-sm font-semibold text-gray-900">
-                        {u.name}（{u.employee_no}）
+              <View>
+                {userResults.map((u) => {
+                  const selected = form.employee_no === u.employee_no;
+                  return (
+                    <View
+                      key={u.id}
+                      className={`border rounded-lg p-3 mb-2 ${
+                        selected ? 'border-primary bg-green-50' : 'border-border'
+                      }`}
+                      onClick={() => pickUser(u)}
+                    >
+                      <View className="flex flex-row items-center justify-between">
+                        <Text className="block text-sm font-semibold text-gray-900">
+                          {u.name}（{u.employee_no}）
+                        </Text>
+                        <Text className="text-xs text-primary">{selected ? '已选' : '选择'}</Text>
+                      </View>
+                      <Text className="block text-xs text-gray-500 mt-1">
+                        {u.department || '未填部门'}
+                        {u.position ? ` · ${u.position}` : ''}
                       </Text>
-                      <Text className="text-xs text-primary">选择</Text>
                     </View>
-                    <Text className="block text-xs text-gray-500 mt-1">
-                      {u.department || '未填部门'}
-                      {u.position ? ` · ${u.position}` : ''}
-                    </Text>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
+            ) : loadingUsers ? (
+              <Text className="block text-sm text-gray-400 text-center py-6">加载中…</Text>
+            ) : (
+              <Text className="block text-sm text-gray-400 text-center py-6">未找到匹配用户</Text>
+            )}
+
+            {userResults.length < userTotal ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full mt-1"
+                onClick={loadMore}
+                disabled={loadingUsers}
+              >
+                加载更多（{userResults.length}/{userTotal}）
+              </Button>
             ) : null}
 
             {form.employee_no ? (

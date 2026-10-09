@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useReachBottom } from '@tarojs/taro';
-import { fetchUsers, resetUserPassword } from '@/services/admin';
+import { fetchUsers, resetUserPassword, adminImportUsers } from '@/services/admin';
 import { getToken } from '@/utils/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Upload } from 'lucide-react-taro';
 
 interface UserItem {
   id: string;
@@ -23,6 +24,7 @@ export default function AdminUsers() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const load = async (p = 1, append = false, kw = keyword) => {
     try {
@@ -57,6 +59,35 @@ export default function AdminUsers() {
     }
   };
 
+  const handleImport = async () => {
+    const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP;
+    if (!isWeapp) {
+      Taro.showToast({ title: '请在微信小程序中使用导入', icon: 'none' });
+      return;
+    }
+    try {
+      const res = await Taro.chooseMessageFile({ count: 1, type: 'file' });
+      const file = res.tempFiles[0];
+      setImporting(true);
+      Taro.showLoading({ title: '导入中...' });
+      const importRes = await adminImportUsers(getToken(), file.path);
+      const data = importRes.data || {};
+      Taro.hideLoading();
+      await Taro.showModal({
+        title: '导入完成',
+        content: `成功导入 ${data.imported || 0} 人，跳过 ${data.skipped || 0} 人（工号已存在），失败 ${data.errors?.length || 0} 条。\n导入后默认密码 = 工号，登录需修改密码。`,
+        showCancel: false,
+      });
+      load(1, false, keyword);
+    } catch (e) {
+      console.error('导入失败', e);
+      Taro.hideLoading();
+      Taro.showToast({ title: '导入失败，请检查文件格式', icon: 'none' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <View className="min-h-screen bg-[#F7F7F5] pb-8">
       <View className="bg-primary px-5 pt-12 pb-6">
@@ -67,6 +98,11 @@ export default function AdminUsers() {
       </View>
 
       <View className="px-4 mt-4">
+        <Button className="w-full mb-3" onClick={handleImport} disabled={importing}>
+          <Upload size={16} color="#ffffff" className="mr-1" />
+          <Text>{importing ? '导入中...' : '导入用户（Excel）'}</Text>
+        </Button>
+
         <View className="flex items-center gap-2">
           <View className="flex-1 bg-white rounded-lg px-3 py-2 border border-border">
             <Input

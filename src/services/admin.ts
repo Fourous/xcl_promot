@@ -304,3 +304,15 @@ export async function adminResetVotes(token: string, id: number) {
   });
   return res.data as ApiResponse<any>;
 }
+
+/** Excel 导入用户到用户池 */
+export async function adminImportUsers(token: string, filePath: string) {
+  const res = await Network.uploadFile({
+    url: '/api/users/import',
+    filePath,
+    name: 'file',
+    header: authHeader(token),
+  });
+  console.log('[API] POST /api/users/import ->', res.data);
+  return JSON.parse(res.data) as ApiResponse<any>;
+}

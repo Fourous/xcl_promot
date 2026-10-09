@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Query, Body, HttpCode, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Body,
+  HttpCode,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { AuthGuard, WritePermissionGuard } from '@/common/auth.guard';
 
@@ -25,6 +37,17 @@ export class UsersController {
   @UseGuards(AuthGuard, WritePermissionGuard)
   async resetPassword(@Body() body: { employeeNo: string }) {
     const data = await this.usersService.resetPassword(body?.employeeNo);
+    return { status: 'success', data };
+  }
+
+  /** POST /api/users/import —— Excel 导入用户到用户池 */
+  @Post('import')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, WritePermissionGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  async importUsers(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('未接收到文件');
+    const data = await this.usersService.importUsers(file);
     return { status: 'success', data };
   }
 }

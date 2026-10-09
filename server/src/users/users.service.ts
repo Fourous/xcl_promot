@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { readFile } from 'fs/promises';
+import * as XLSX from 'xlsx';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 /** 用户池（voter_accounts）管理服务：全局账号，工号唯一 */
@@ -46,5 +48,71 @@ export class UsersService {
     if (error) throw new BadRequestException(`重置失败: ${error.message}`);
 
     return { reset: true, employeeNo: emp };
+  }
+
+  /** Excel 导入用户到用户池（工号唯一，默认密码=工号，登录后强制改密） */
+  async importUsers(file: Express.Multer.File) {
+    const buffer = file.buffer || (file.path ? await readFile(file.path) : null);
+    if (!buffer) throw new BadRequestException('无法读取文件内容');
+
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if (!sheet) throw new BadRequestException('文件为空或格式不支持');
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+    // 表头：工号 | 姓名 | 部门 | 岗位 | 简介
+    const dataRows = rows.slice(1).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
+
+    const client = getSupabaseClient();
+    let imported = 0;
+    let skipped = 0;
+    const errors: any[] = [];
+    const seen = new Set<string>();
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const cells = dataRows[i];
+      const employeeNo = String(cells[0] ?? '').trim();
+      const name = String(cells[1] ?? '').trim();
+      const department = String(cells[2] ?? '').trim();
+      const position = String(cells[3] ?? '').trim();
+      const intro = String(cells[4] ?? '').trim();
+      const line = i + 2;
+
+      if (!employeeNo || !name) {
+        errors.push({ line, employeeNo, name, reason: '工号或姓名缺失' });
+        continue;
+      }
+      if (seen.has(employeeNo)) {
+        errors.push({ line, employeeNo, name, reason: '文件内工号重复' });
+        continue;
+      }
+      seen.add(employeeNo);
+
+      const { data: existing } = await client
+        .from('voter_accounts')
+        .select('id')
+        .eq('employee_no', employeeNo)
+        .maybeSingle();
+      if (existing) {
+        skipped += 1;
+        continue;
+      }
+
+      const { error } = await client.from('voter_accounts').insert({
+        employee_no: employeeNo,
+        name,
+        department: department || null,
+        position: position || null,
+        intro: intro || null,
+        status: 'active',
+        password_hash: null,
+      });
+      if (error) {
+        errors.push({ line, employeeNo, name, reason: error.message });
+        continue;
+      }
+      imported += 1;
+    }
+
+    return { imported, skipped, total: dataRows.length, errors };
   }
 }

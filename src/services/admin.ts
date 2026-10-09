@@ -295,6 +295,21 @@ export async function resetUserPassword(token: string, employeeNo: string) {
   return res.data as ApiResponse<any>;
 }
 
+/** 新增单个用户 */
+export async function createUser(
+  token: string,
+  data: { employeeNo: string; name: string; department?: string; position?: string; intro?: string },
+) {
+  const res = await Network.request({
+    url: '/api/users',
+    method: 'POST',
+    header: authHeader(token),
+    data,
+  });
+  console.log('[API] POST /api/users ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
 /** 重置活动投票数据 */
 export async function adminResetVotes(token: string, id: number) {
   const res = await Network.request({

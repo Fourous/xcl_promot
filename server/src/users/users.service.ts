@@ -50,6 +50,44 @@ export class UsersService {
     return { reset: true, employeeNo: emp };
   }
 
+  /** 新增单个用户到用户池（工号唯一，默认密码=工号，登录后强制改密） */
+  async createUser(dto: {
+    employeeNo: string;
+    name: string;
+    department?: string;
+    position?: string;
+    intro?: string;
+  }) {
+    const client = getSupabaseClient();
+    const employeeNo = String(dto?.employeeNo || '').trim();
+    const name = String(dto?.name || '').trim();
+    if (!employeeNo || !name) throw new BadRequestException('工号和姓名不能为空');
+
+    const { data: existing } = await client
+      .from('voter_accounts')
+      .select('id')
+      .eq('employee_no', employeeNo)
+      .maybeSingle();
+    if (existing) throw new BadRequestException('该工号已存在');
+
+    const { data, error } = await client
+      .from('voter_accounts')
+      .insert({
+        employee_no: employeeNo,
+        name,
+        department: String(dto?.department || '').trim() || null,
+        position: String(dto?.position || '').trim() || null,
+        intro: String(dto?.intro || '').trim() || null,
+        status: 'active',
+        password_hash: null,
+      })
+      .select()
+      .single();
+    if (error) throw new BadRequestException(`新增失败: ${error.message}`);
+
+    return data;
+  }
+
   /** Excel 导入用户到用户池（工号唯一，默认密码=工号，登录后强制改密） */
   async importUsers(file: Express.Multer.File) {
     const buffer = file.buffer || (file.path ? await readFile(file.path) : null);

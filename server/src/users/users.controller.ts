@@ -31,6 +31,24 @@ export class UsersController {
     return { status: 'success', data };
   }
 
+  /** POST /api/users —— 新增单个用户 */
+  @Post()
+  @HttpCode(200)
+  @UseGuards(AuthGuard, WritePermissionGuard)
+  async create(
+    @Body()
+    body: {
+      employeeNo: string;
+      name: string;
+      department?: string;
+      position?: string;
+      intro?: string;
+    },
+  ) {
+    const data = await this.usersService.createUser(body);
+    return { status: 'success', data };
+  }
+
   /** POST /api/users/reset-password —— 重置密码（恢复默认密码 = 工号） */
   @Post('reset-password')
   @HttpCode(200)

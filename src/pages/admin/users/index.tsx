@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useReachBottom } from '@tarojs/taro';
-import { fetchUsers, resetUserPassword, adminImportUsers } from '@/services/admin';
+import { fetchUsers, resetUserPassword, adminImportUsers, createUser } from '@/services/admin';
 import { getToken } from '@/utils/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload } from 'lucide-react-taro';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Upload, UserPlus } from 'lucide-react-taro';
 
 interface UserItem {
   id: string;
@@ -18,6 +25,8 @@ interface UserItem {
   status: string;
 }
 
+const EMPTY_FORM = { employeeNo: '', name: '', department: '', position: '', intro: '' };
+
 /** 用户池管理（全局账号，工号唯一） */
 export default function AdminUsers() {
   const [list, setList] = useState<UserItem[]>([]);
@@ -25,6 +34,9 @@ export default function AdminUsers() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [importing, setImporting] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const load = async (p = 1, append = false, kw = keyword) => {
     try {
@@ -46,6 +58,36 @@ export default function AdminUsers() {
   useReachBottom(() => {
     if (list.length < total) load(page + 1, true);
   });
+
+  const setField = (key: keyof typeof EMPTY_FORM, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCreate = async () => {
+    if (!form.employeeNo.trim() || !form.name.trim()) {
+      Taro.showToast({ title: '请填写工号和姓名', icon: 'none' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await createUser(getToken(), {
+        employeeNo: form.employeeNo.trim(),
+        name: form.name.trim(),
+        department: form.department.trim(),
+        position: form.position.trim(),
+        intro: form.intro.trim(),
+      });
+      setShowCreate(false);
+      setForm(EMPTY_FORM);
+      Taro.showToast({ title: '新增成功', icon: 'success' });
+      load(1, false, keyword);
+    } catch (e: any) {
+      const msg = e?.message || '新增失败';
+      Taro.showToast({ title: msg.includes('已存在') ? '该工号已存在' : '新增失败', icon: 'none' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleReset = async (item: UserItem) => {
     const res = await Taro.showModal({
@@ -98,10 +140,21 @@ export default function AdminUsers() {
       </View>
 
       <View className="px-4 mt-4">
-        <Button className="w-full mb-3" onClick={handleImport} disabled={importing}>
-          <Upload size={16} color="#ffffff" className="mr-1" />
-          <Text>{importing ? '导入中...' : '导入用户（Excel）'}</Text>
-        </Button>
+        <View className="flex flex-row gap-2 mb-3">
+          <Button className="flex-1" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}>
+            <UserPlus size={16} color="#ffffff" className="mr-1" />
+            <Text>新增用户</Text>
+          </Button>
+          <Button
+            className="flex-1"
+            variant="outline"
+            onClick={handleImport}
+            disabled={importing}
+          >
+            <Upload size={16} color="#C80018" className="mr-1" />
+            <Text>{importing ? '导入中...' : '导入用户'}</Text>
+          </Button>
+        </View>
 
         <View className="flex items-center gap-2">
           <View className="flex-1 bg-white rounded-lg px-3 py-2 border border-border">
@@ -146,6 +199,64 @@ export default function AdminUsers() {
           <Text className="block text-sm text-gray-400 text-center py-10">暂无用户</Text>
         ) : null}
       </View>
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新增用户</DialogTitle>
+          </DialogHeader>
+          <View className="flex flex-col gap-3 py-2">
+            <View className="bg-gray-50 rounded-lg px-3 py-2 border border-border">
+              <Input
+                className="w-full text-sm"
+                placeholder="工号（必填，登录账号）"
+                value={form.employeeNo}
+                onInput={(e) => setField('employeeNo', e.detail.value)}
+              />
+            </View>
+            <View className="bg-gray-50 rounded-lg px-3 py-2 border border-border">
+              <Input
+                className="w-full text-sm"
+                placeholder="姓名（必填）"
+                value={form.name}
+                onInput={(e) => setField('name', e.detail.value)}
+              />
+            </View>
+            <View className="bg-gray-50 rounded-lg px-3 py-2 border border-border">
+              <Input
+                className="w-full text-sm"
+                placeholder="部门（选填）"
+                value={form.department}
+                onInput={(e) => setField('department', e.detail.value)}
+              />
+            </View>
+            <View className="bg-gray-50 rounded-lg px-3 py-2 border border-border">
+              <Input
+                className="w-full text-sm"
+                placeholder="岗位（选填）"
+                value={form.position}
+                onInput={(e) => setField('position', e.detail.value)}
+              />
+            </View>
+            <View className="bg-gray-50 rounded-lg px-3 py-2 border border-border">
+              <Input
+                className="w-full text-sm"
+                placeholder="简介（选填）"
+                value={form.intro}
+                onInput={(e) => setField('intro', e.detail.value)}
+              />
+            </View>
+          </View>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>
+              取消
+            </Button>
+            <Button onClick={handleCreate} disabled={saving}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </View>
   );
 }

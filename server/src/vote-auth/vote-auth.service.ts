@@ -23,15 +23,15 @@ export class VoteAuthService {
       .eq('employee_no', emp)
       .maybeSingle();
 
-    if (!acc) throw new BadRequestException('账号不存在或不在投票名单中');
+    if (!acc) throw new BadRequestException('没有该账号，请联系管理员确认');
 
     let needChangePassword = false;
     if (!acc.password_hash) {
       // 首次登录：初始密码 = 工号
-      if (pwd !== emp) throw new BadRequestException('工号或密码错误');
+      if (pwd !== emp) throw new BadRequestException('密码错误，如需重置请联系管理员');
       needChangePassword = true;
     } else {
-      if (!verifyPassword(pwd, acc.password_hash)) throw new BadRequestException('工号或密码错误');
+      if (!verifyPassword(pwd, acc.password_hash)) throw new BadRequestException('密码错误，如需重置请联系管理员');
     }
 
     const token = signVoterToken(acc.employee_no, acc.name);

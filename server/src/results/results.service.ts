@@ -10,13 +10,11 @@ export class ResultsService {
     const { data: config } = await client.from('vote_config').select('*').eq('id', aid).single();
     if (!config) throw new BadRequestException('投票规则未配置');
 
-    // 结果可见性：实时公示开启，或已到结果公示时间，或活动已结束
+    // 结果可见性（递进逻辑）：投票结束禁止查看，到公示时间或开启实时公示才可见
     const now = new Date();
     const published =
       config.realtime_public ||
-      (config.result_publish_time && new Date(config.result_publish_time) <= now) ||
-      config.status === 'ended' ||
-      config.status === 'archived';
+      (config.result_publish_time && new Date(config.result_publish_time) <= now);
     if (!published) {
       return { published: false, winners: config.winner_count, list: [], votedCount: 0, totalVotes: 0 };
     }

@@ -12,6 +12,7 @@ import { ImportModule } from '@/import/import.module';
 import { StatsModule } from '@/stats/stats.module';
 import { SystemModule } from '@/system/system.module';
 import { ActivitiesModule } from '@/activities/activities.module';
+import { UsersModule } from '@/users/users.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ActivitiesModule } from '@/activities/activities.module';
     StatsModule,
     SystemModule,
     ActivitiesModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

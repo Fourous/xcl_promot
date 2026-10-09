@@ -56,6 +56,15 @@ export class ActivitiesController {
     return { status: 'success', data };
   }
 
+  /** 重置活动投票数据 */
+  @Post(':id/reset-votes')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, WritePermissionGuard)
+  async resetVotes(@Param('id', ParseIntPipe) id: number) {
+    const data = await this.service.resetVotes(id);
+    return { status: 'success', data };
+  }
+
   /** 更新活动状态 */
   @Post(':id/status')
   @HttpCode(200)

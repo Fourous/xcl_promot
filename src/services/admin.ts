@@ -268,3 +268,39 @@ export async function adminArchive(token: string, body: Record<string, any>) {
   });
   return res.data as ApiResponse<any>;
 }
+
+/** 用户池列表 */
+export async function fetchUsers(
+  token: string,
+  params: { keyword?: string; page?: number; pageSize?: number },
+) {
+  const res = await Network.request({
+    url: '/api/users',
+    method: 'GET',
+    header: authHeader(token),
+    data: { ...params },
+  });
+  console.log('[API] GET /api/users ->', res.data);
+  return res.data as ApiResponse<any>;
+}
+
+/** 重置用户密码（恢复默认密码 = 工号） */
+export async function resetUserPassword(token: string, employeeNo: string) {
+  const res = await Network.request({
+    url: '/api/users/reset-password',
+    method: 'POST',
+    header: authHeader(token),
+    data: { employeeNo },
+  });
+  return res.data as ApiResponse<any>;
+}
+
+/** 重置活动投票数据 */
+export async function adminResetVotes(token: string, id: number) {
+  const res = await Network.request({
+    url: `/api/activities/${id}/reset-votes`,
+    method: 'POST',
+    header: authHeader(token),
+  });
+  return res.data as ApiResponse<any>;
+}

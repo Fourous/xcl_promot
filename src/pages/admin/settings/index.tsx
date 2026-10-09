@@ -7,11 +7,11 @@ import {
   adminUpdateAdmin,
   adminDeleteAdmin,
   adminLogs,
-  adminArchive,
   fetchActivities,
   adminCreateActivity,
   adminArchiveActivity,
   adminUpdateActivityStatus,
+  adminResetVotes,
 } from '@/services/admin';
 import { getToken } from '@/utils/auth';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,6 @@ const TABS = [
   { key: 'activities', label: '活动管理' },
   { key: 'admins', label: '管理员' },
   { key: 'logs', label: '操作日志' },
-  { key: 'archive', label: '数据归档' },
 ];
 
 const ROLE_TEXT: Record<string, string> = {
@@ -163,21 +162,17 @@ export default function SettingsPage() {
     }
   };
 
-  const handleArchive = async (type: string) => {
-    const title = type === 'reset_votes' ? '重置投票数据' : '活动归档';
+  const handleResetVotes = async (id: number) => {
     const res = await Taro.showModal({
-      title,
-      content:
-        type === 'reset_votes'
-          ? '将清空所有投票记录并重置投票人状态，此操作不可恢复！'
-          : '将活动归档，归档后不可投票，此操作不可恢复！',
+      title: '重置投票数据',
+      content: '将清空该活动的所有投票记录并重置投票人状态，此操作不可恢复！',
     });
     if (!res.confirm) return;
     try {
-      await adminArchive(getToken(), { type });
-      Taro.showToast({ title: '操作成功', icon: 'success' });
-    } catch (e) {
-      Taro.showToast({ title: '操作失败', icon: 'none' });
+      await adminResetVotes(getToken(), id);
+      Taro.showToast({ title: '已重置', icon: 'success' });
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '操作失败', icon: 'none' });
     }
   };
 
@@ -267,6 +262,9 @@ export default function SettingsPage() {
                     归档
                   </Button>
                 ) : null}
+                <Button size="sm" variant="outline" onClick={() => handleResetVotes(a.id)}>
+                  重置投票数据
+                </Button>
               </View>
             </View>
           ))}
@@ -377,23 +375,6 @@ export default function SettingsPage() {
         </View>
       ) : null}
 
-      {/* 数据归档 */}
-      {tab === 'archive' ? (
-        <View className="px-4 mt-4">
-          <View className="bg-white rounded-lg p-5">
-            <Text className="block text-base font-bold text-gray-900 mb-4">危险操作</Text>
-            <Button className="w-full mb-3" variant="outline" onClick={() => handleArchive('reset_votes')}>
-              重置投票数据
-            </Button>
-            <Button className="w-full" variant="outline" onClick={() => handleArchive('archive')}>
-              活动归档
-            </Button>
-            <Text className="block text-xs text-gray-500 mt-3">
-              以上操作均需二次确认，且会写入操作日志，请谨慎执行。
-            </Text>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }

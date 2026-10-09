@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { key: 'config', label: '规则配置', icon: Settings, url: '/pages/admin/config/index' },
   { key: 'records', label: '投票记录', icon: List, url: '/pages/admin/records/index' },
   { key: 'result', label: '结果统计', icon: Trophy, url: '/pages/admin/result/index' },
+  { key: 'users', label: '用户管理', icon: Users, url: '/pages/admin/users/index' },
   { key: 'settings', label: '系统管理', icon: ShieldCheck, url: '/pages/admin/settings/index' },
 ];
 

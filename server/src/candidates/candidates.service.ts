@@ -7,6 +7,7 @@ export interface Candidate {
   code: string;
   name: string;
   department: string;
+  employee_no: string | null;
   position: string | null;
   avatar_url: string | null;
   intro: string | null;
@@ -86,19 +87,40 @@ export class CandidatesService {
     return unique;
   }
 
-  /** 新增候选人 */
+  /** 新增候选人（支持从用户池按工号选择，自动带出姓名/部门/岗位） */
   async create(body: any, activityId = 1) {
     const client = getSupabaseClient();
+    const aid = Number(activityId) || 1;
+    let name = body.name;
+    let department = body.department;
+    let position = body.position || null;
+    let intro = body.intro || null;
+
+    // 从用户池选择：若提供 employee_no，则校验并带出用户信息
+    if (body.employee_no) {
+      const { data: user } = await client
+        .from('voter_accounts')
+        .select('*')
+        .eq('employee_no', body.employee_no)
+        .maybeSingle();
+      if (!user) throw new BadRequestException('该工号不在用户池中，请先在「用户管理」导入');
+      name = user.name;
+      department = user.department;
+      position = user.position || null;
+      intro = intro || user.intro || null;
+    }
+
     const { data, error } = await client
       .from('candidates')
       .insert({
-        activity_id: Number(activityId) || 1,
+        activity_id: aid,
         code: body.code,
-        name: body.name,
-        department: body.department,
-        position: body.position || null,
+        employee_no: body.employee_no || null,
+        name,
+        department,
+        position,
         avatar_url: body.avatar_url || null,
-        intro: body.intro || null,
+        intro,
         sort_weight: body.sort_weight || 0,
         status: body.status || 'active',
       })

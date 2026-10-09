@@ -17,6 +17,7 @@ export default defineAppConfig({
     'pages/admin/records/index',
     'pages/admin/result/index',
     'pages/admin/settings/index',
+    'pages/admin/users/index',
   ],
   window: {
     backgroundTextStyle: 'light',

@@ -111,6 +111,19 @@ export class ActivitiesService {
     return { archived: true, id };
   }
 
+  /** 重置活动投票数据：清空投票明细与提交记录，重置投票人状态 */
+  async resetVotes(id: number) {
+    const client = getSupabaseClient();
+    const { data: voters } = await client.from('voters').select('id').eq('activity_id', id);
+    const voterIds = (voters || []).map((v: any) => v.id);
+    if (voterIds.length) {
+      await client.from('votes').delete().in('voter_id', voterIds);
+      await client.from('vote_submissions').delete().in('voter_id', voterIds);
+    }
+    await client.from('voters').update({ has_voted: false, voted_at: null }).eq('activity_id', id);
+    return { reset: true, id };
+  }
+
   /** 切换活动状态（未开始/进行中/已结束） */
   async updateStatus(id: number, status: string) {
     const client = getSupabaseClient();

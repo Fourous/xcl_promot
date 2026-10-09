@@ -57,13 +57,6 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
       { key: 'enable_department_filter', label: '开启部门筛选', type: 'boolean' },
     ],
   },
-  {
-    title: '结果设置',
-    fields: [
-      { key: 'device_vote_limit', label: '单设备投票上限', type: 'number' },
-      { key: 'ip_vote_limit', label: '单 IP 投票上限', type: 'number' },
-    ],
-  },
 ];
 
 const SORT_OPTIONS = [
@@ -129,6 +122,7 @@ export default function ConfigPage() {
     try {
       await adminSaveConfig(getToken(), config);
       Taro.showToast({ title: '已保存并生效', icon: 'success' });
+      setTimeout(() => Taro.navigateBack(), 500);
     } catch (e) {
       Taro.showToast({ title: '保存失败', icon: 'none' });
     } finally {

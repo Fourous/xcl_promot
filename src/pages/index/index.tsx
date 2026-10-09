@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { fetchMyActivities, ActivityWithRight } from '@/services/vote';
 import { setActivityId } from '@/utils/activity';
-import { isLoggedIn, getVoterToken, getVoterName } from '@/utils/session';
+import { isLoggedIn, getVoterToken, getVoterName, clearSession } from '@/utils/session';
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '草稿',
@@ -98,6 +98,18 @@ const IndexPage = () => {
           <Text className="text-white text-xs tracking-wide">
             {loggedIn ? `欢迎，${getVoterName() || getVoterToken().slice(0, 6)}` : '集团党委 · 集团工会'}
           </Text>
+          {loggedIn ? (
+            <Text
+              className="text-white text-xs underline ml-2"
+              onClick={() => {
+                clearSession();
+                Taro.showToast({ title: '已退出登录', icon: 'none' });
+                setTimeout(() => Taro.reLaunch({ url: '/pages/index/index' }), 300);
+              }}
+            >
+              退出登录
+            </Text>
+          ) : null}
         </View>
       </View>
 

@@ -7,6 +7,7 @@ export interface Candidate {
   code: string;
   name: string;
   department: string;
+  employee_no: string | null;
   position: string | null;
   avatar_url: string | null;
   intro: string | null;
